@@ -5,7 +5,7 @@ use log;
 
 use tun::AsyncDevice;
 
-pub async fn run_tun(name: &str, mtu: i32) -> Result<AsyncDevice> {
+pub async fn run(name: &str, mtu: i32) -> Result<AsyncDevice> {
     let mut config = tun::Configuration::default();
     config.name(name);
     config

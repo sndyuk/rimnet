@@ -5,8 +5,9 @@ use clap::Parser;
 use anyhow::Result;
 use env_logger::{self, Env};
 use log::{debug, error, info, warn};
+use rimnet::gateway;
 use std::io::prelude::*;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::{collections::HashMap, net::SocketAddr};
 use tokio::sync::Mutex;
@@ -23,7 +24,6 @@ use packet::{ip::v4, Packet};
 use tokio_util::codec::FramedRead;
 
 mod inbound;
-mod message;
 
 lazy_static! {
     static ref PARAMS: NoiseParams = "Noise_N_25519_ChaChaPoly_BLAKE2s".parse().unwrap();
@@ -54,15 +54,18 @@ async fn main() -> Result<()> {
         .format(|buf, record| writeln!(buf, "{}", record.args()))
         .init();
 
-    // Start TUN
-    let tun = inbound::run_tun(&opts.tun_device_name, opts.mtu).await?;
-    let (reader, mut writer) = tokio::io::split(tun);
+    // Start the inbound network
+    let inbound = inbound::run(&opts.tun_device_name, opts.mtu).await?;
+    let (inbound_reader, mut inbound_writer) = tokio::io::split(inbound);
     let codec = TunPacketCodec::new(true, opts.mtu);
-    let mut frame_reader = FramedRead::new(reader, codec);
+    let mut frame_inbound_reader = FramedRead::new(inbound_reader, codec);
 
-    // Listen the main traffic port
-    let main_sock_addr = Arc::new(UdpSocket::bind(format!("127.0.0.1:{}", opts.port)).await?);
-    info!("listening on {:?}", main_sock_addr.local_addr().unwrap());
+    // Listen the tunnel(encrypted payload <==> raw payload) traffic port
+    let tunnel_sock_addr = Arc::new(UdpSocket::bind(format!("127.0.0.1:{}", opts.port)).await?);
+    info!(
+        "The tunnel listening on {:?}",
+        tunnel_sock_addr.local_addr()?
+    );
 
     // Prepare keypair for Noise
     let keypair = Builder::new(PARAMS.clone()).generate_keypair()?;
@@ -71,15 +74,39 @@ async fn main() -> Result<()> {
     // Prepare public keys
     let public_keys = Arc::new(Mutex::new(PrivateNet { db: HashMap::new() }));
 
+    // Inbound incomming loop
+    let inbound_incomming_loop = tokio::spawn({
+        let tunnel_sock_addr = tunnel_sock_addr.clone();
+        let public_keys = public_keys.clone();
+        let private_key = keypair.private.clone();
+        async move {
+            match listen_inbound_incomming(
+                &mut inbound_writer,
+                &tunnel_sock_addr,
+                public_keys,
+                private_key,
+            )
+            .await
+            {
+                Ok(_) => true,
+                Err(e) => {
+                    log::error!("[Inbound / incomming] {:?}", e);
+                    false
+                }
+            }
+        }
+    });
+    debug!("[Inbound / incomming] Main loop started");
+
     // Inbound outging loop
     let inbound_outgoing_loop = tokio::spawn({
-        let main_sock_addr = main_sock_addr.clone();
+        let tunnel_sock_addr = tunnel_sock_addr.clone();
         let private_key = keypair.private.clone();
         let public_keys = public_keys.clone();
         async move {
             match listen_inbound_outgoing(
-                &mut frame_reader,
-                &main_sock_addr,
+                &mut frame_inbound_reader,
+                &tunnel_sock_addr,
                 opts.port,
                 public_keys,
                 private_key,
@@ -96,26 +123,8 @@ async fn main() -> Result<()> {
     });
     debug!("[Inbound / outgoing] Main loop started");
 
-    // Writer loop
-    let inbound_incomming_loop = tokio::spawn({
-        let main_sock_addr = main_sock_addr.clone();
-        let private_key = keypair.private.clone();
-        async move {
-            match listen_inbound_incomming(&mut writer, &main_sock_addr, public_keys, private_key)
-                .await
-            {
-                Ok(_) => true,
-                Err(e) => {
-                    log::error!("[Inbound / incomming] {:?}", e);
-                    false
-                }
-            }
-        }
-    });
-    debug!("[Inbound / incomming] Main loop started");
-
-    inbound_outgoing_loop.await?;
     inbound_incomming_loop.await?;
+    inbound_outgoing_loop.await?;
     Ok(())
 }
 
@@ -124,24 +133,24 @@ struct PrivateNet {
 }
 
 struct PrivateNode {
-    public_ipv4: Ipv4Addr,
+    public_addr: SocketAddr,
     public_key: Vec<u8>,
 }
 
 trait PrivateNetRegistry {
     fn get(&self, private_addr: &Ipv4Addr) -> Option<&PrivateNode>;
-    fn put(&mut self, private_addr: &Ipv4Addr, public_ipv4: &Ipv4Addr, public_key: Vec<u8>);
+    fn put(&mut self, private_ipv4: &Ipv4Addr, public_addr: SocketAddr, public_key: Vec<u8>);
 }
 
 impl PrivateNetRegistry for PrivateNet {
     fn get(&self, private_addr: &Ipv4Addr) -> Option<&PrivateNode> {
         self.db.get(private_addr)
     }
-    fn put(&mut self, private_addr: &Ipv4Addr, public_ipv4: &Ipv4Addr, public_key: Vec<u8>) {
+    fn put(&mut self, private_addr: &Ipv4Addr, public_addr: SocketAddr, public_key: Vec<u8>) {
         self.db.insert(
             private_addr.clone(),
             PrivateNode {
-                public_ipv4: public_ipv4.clone(),
+                public_addr,
                 public_key,
             },
         );
@@ -154,133 +163,13 @@ struct Peer {
     remote_addr: Box<SocketAddr>,
 }
 
-async fn listen_inbound_outgoing(
-    tun_reader: &mut FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>,
-    main_sock: &UdpSocket,
-    main_port: u16,
-    private_net: Arc<Mutex<PrivateNet>>,
-    private_key: Vec<u8>,
-) -> Result<()> {
-    let mut peers: HashMap<Ipv4Addr, Peer> = HashMap::new();
-    loop {
-        match tun_reader.next().await {
-            Some(Ok(raw_packet)) => {
-                let packet = v4::Packet::unchecked(raw_packet.get_bytes());
-                let peer_private_addr = packet.source();
-                let private_net = private_net.lock().await;
-                match peers.get_mut(&peer_private_addr) {
-                    // Received packet from a unknown peer
-                    None => {
-                        let remote_node = match private_net.get(&peer_private_addr) {
-                            Some(remote_public_key) => remote_public_key,
-                            None => {
-                                warn!("[Inbound / outgoing] The client doesn't registered. peer_private_addr={}", peer_private_addr);
-                                continue;
-                            }
-                        };
-                        let mut hs = Builder::new(PARAMS.clone())
-                            .local_private_key(&private_key)
-                            .remote_public_key(&remote_node.public_key)
-                            .build_responder()?;
-
-                        debug!("[Inbound / outgoing] Start handshake");
-                        let peer_remote_addr = SocketAddr::new(peer_private_addr.into(), main_port);
-                        debug!("[Inbound / outgoing] peer_remote_addr={}", peer_remote_addr);
-                        let mut buf = vec![0u8; 65535];
-                        let handshake_len = hs.write_message(&[], &mut buf)?;
-                        match message::send(main_sock, &buf[..handshake_len], &peer_remote_addr)
-                            .await
-                        {
-                            Ok(_) => {
-                                debug!("[Inbound / outgoing] Handshake scceeded and sending the packet");
-                                let len = hs.write_message(raw_packet.get_bytes(), &mut buf)?;
-                                match message::send(main_sock, &buf[..len], &peer_remote_addr).await
-                                {
-                                    Ok(_) => {
-                                        debug!(
-                                                    "[Inbound / outgoing] Session established: peer_private={}, peer_remote={}",
-                                                    peer_private_addr, peer_remote_addr
-                                                );
-                                    }
-                                    Err(e) => {
-                                        warn!("[Inbound / outgoing] Could not send the packet. reason={:?}", e);
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                warn!("[Inbound / outgoing] Handshake failed. peer_private={}, reason={:?}", peer_private_addr, e);
-                            }
-                        }
-                    }
-                    // Received packet from a registered peer
-                    Some(peer) => {
-                        debug!("[Inbound / outgoing] Sending the packet");
-                        let payload = packet.payload();
-                        if payload.len() == 0 {
-                            debug!(
-                                "[Inbound / outgoing] Ignore the packet. peer_private_addr={}",
-                                peer_private_addr
-                            );
-                            continue;
-                        }
-                        match payload[0] {
-                            // Afer the handshake
-                            2 => {
-                                let len = peer
-                                    .ts
-                                    .as_mut()
-                                    .write_message(raw_packet.get_bytes(), &mut peer.buf)?;
-                                match message::send(main_sock, &peer.buf[..len], &peer.remote_addr)
-                                    .await
-                                {
-                                    Ok(_) => {
-                                        debug!(
-                                        "[Inbound / outgoing] Sent packet. peer_private={}, peer_public={}",
-                                        peer_private_addr, peer.remote_addr
-                                    );
-                                    }
-                                    Err(e) => {
-                                        warn!(
-                                        "[Inbound / outgoing] Could not send the data. peer_private={}, reason={:?}",
-                                        peer_private_addr,
-                                        e
-                                    );
-                                    }
-                                }
-                            }
-                            _ => {
-                                debug!(
-                                    "[Inbound / outgoing] Ignore the packet. peer_private_addr={}, reason=Unknown payload type `{}`",
-                                    peer_private_addr,
-                                    payload[0],
-                                );
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
-            Some(Err(e)) => {
-                warn!(
-                    "[Inbound / outgoing] Could not read the UDP packet. reason={:?}",
-                    e
-                );
-                continue;
-            }
-            None => {
-                warn!("[Inbound / outgoing] Could not read the UDP packet. reason=unknown");
-                continue;
-            }
-        }
-    }
-}
-
 async fn listen_inbound_incomming(
     tun_writer: &mut WriteHalf<AsyncDevice>,
     main_sock: &UdpSocket,
     private_net: Arc<Mutex<PrivateNet>>,
     private_key: Vec<u8>,
 ) -> Result<()> {
+    // Key: private IPv4 of the peer
     let mut peers: HashMap<Ipv4Addr, Peer> = HashMap::new();
 
     /*
@@ -306,38 +195,31 @@ async fn listen_inbound_incomming(
                                     .build_responder()?;
     */
     loop {
-        match message::recv(main_sock).await {
+        match gateway::recv(main_sock).await {
             Ok((raw_packet, peer_remote_addr)) => {
                 let packet = v4::Packet::unchecked(raw_packet);
-                let peer_private_addr = packet.source();
-                match peers.get_mut(&peer_private_addr) {
+                let peer_private_ipv4 = packet.source();
+                match peers.get_mut(&peer_private_ipv4) {
                     // Before the handshake. The first packet must be the handshake request.
                     None => {
                         debug!("[Inbound / incomming] Start handshake");
 
-                        let peer_public_key = match private_net.lock().await.get(&peer_private_addr)
-                        {
-                            Some(node) => node.public_key.clone(),
-                            None => {
-                                log::warn!(
-                                    "The node is not regstered. private_ipv4={}",
-                                    peer_private_addr
-                                );
-                                continue;
-                            }
-                        };
-
                         let mut hs = Builder::new(PARAMS.clone())
                             .local_private_key(&private_key)
-                            .remote_public_key(&peer_public_key)
                             .build_responder()?;
 
                         let mut buf = vec![0u8; 65535];
                         match hs.read_message(packet.payload(), &mut buf) {
-                            Ok(_) => {
+                            Ok(payload_len) => {
                                 debug!("[Inbound / incomming] Handshake scceeded");
+                                let remote_pubilc_key = &buf[..payload_len];
+                                private_net.lock().await.put(
+                                    &peer_private_ipv4,
+                                    peer_remote_addr,
+                                    Vec::from(remote_pubilc_key),
+                                );
                                 peers.insert(
-                                    peer_private_addr,
+                                    peer_private_ipv4,
                                     Peer {
                                         ts: Box::new(hs.into_transport_mode()?),
                                         buf,
@@ -346,11 +228,11 @@ async fn listen_inbound_incomming(
                                 );
                                 debug!(
                                     "[Inbound / incomming] Session established: peer_private={}, peer_remote={}",
-                                    peer_private_addr, peer_remote_addr
+                                    peer_private_ipv4, peer_remote_addr
                                 );
                             }
                             Err(e) => {
-                                warn!("[Inbound / incomming] Handshake failed. peer_private={}, reason={:?}", peer_private_addr, e);
+                                warn!("[Inbound / incomming] Handshake failed. peer_private={}, reason={:?}", peer_private_ipv4, e);
                             }
                         };
                     }
@@ -397,8 +279,8 @@ async fn listen_inbound_incomming(
                             }
                             Err(e) => {
                                 error!(
-                                    "[Inbound / incomming] Could not decrypt the payload. peer_private={}. reason={:?}",
-                                    peer_private_addr, e
+                                    "[Inbound / incomming] Could not decrypt the payload. peer_private_ipv4={}. reason={:?}",
+                                    peer_private_ipv4, e
                                 );
                             }
                         }
@@ -406,7 +288,131 @@ async fn listen_inbound_incomming(
                 }
             }
             Err(e) => {
-                debug!("Could not read the UDP packet. {:?}", e);
+                debug!(
+                    "[Inbound / incomming] Could not read the UDP packet. {:?}",
+                    e
+                );
+                continue;
+            }
+        }
+    }
+}
+
+async fn listen_inbound_outgoing(
+    tun_reader: &mut FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>,
+    main_sock: &UdpSocket,
+    main_port: u16,
+    private_net: Arc<Mutex<PrivateNet>>,
+    private_key: Vec<u8>,
+) -> Result<()> {
+    let mut peers: HashMap<Ipv4Addr, Peer> = HashMap::new();
+    loop {
+        match tun_reader.next().await {
+            Some(Ok(raw_packet)) => {
+                let packet = v4::Packet::unchecked(raw_packet.get_bytes());
+                let peer_private_addr = packet.source();
+                let private_net = private_net.lock().await;
+                match peers.get_mut(&peer_private_addr) {
+                    // Received packet from a unknown peer
+                    None => {
+                        let remote_node = match private_net.get(&peer_private_addr) {
+                            Some(remote_public_key) => remote_public_key,
+                            None => {
+                                warn!("[Inbound / outgoing] The client doesn't registered. peer_private_addr={}", peer_private_addr);
+                                continue;
+                            }
+                        };
+                        let mut hs = Builder::new(PARAMS.clone())
+                            .local_private_key(&private_key)
+                            .remote_public_key(&remote_node.public_key)
+                            .build_responder()?;
+
+                        debug!("[Inbound / outgoing] Start handshake");
+                        let peer_remote_addr = SocketAddr::new(peer_private_addr.into(), main_port);
+                        debug!("[Inbound / outgoing] peer_remote_addr={}", peer_remote_addr);
+                        let mut buf = vec![0u8; 65535];
+                        let handshake_len = hs.write_message(&[], &mut buf)?;
+                        match gateway::send(main_sock, &buf[..handshake_len], &peer_remote_addr)
+                            .await
+                        {
+                            Ok(_) => {
+                                debug!("[Inbound / outgoing] Handshake scceeded and sending the packet");
+                                let len = hs.write_message(raw_packet.get_bytes(), &mut buf)?;
+                                match gateway::send(main_sock, &buf[..len], &peer_remote_addr).await
+                                {
+                                    Ok(_) => {
+                                        debug!(
+                                                    "[Inbound / outgoing] Session established: peer_private={}, peer_remote={}",
+                                                    peer_private_addr, peer_remote_addr
+                                                );
+                                    }
+                                    Err(e) => {
+                                        warn!("[Inbound / outgoing] Could not send the packet. reason={:?}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!("[Inbound / outgoing] Handshake failed. peer_private={}, reason={:?}", peer_private_addr, e);
+                            }
+                        }
+                    }
+                    // Received packet from a registered peer
+                    Some(peer) => {
+                        debug!("[Inbound / outgoing] Sending the packet");
+                        let payload = packet.payload();
+                        if payload.len() == 0 {
+                            debug!(
+                                "[Inbound / outgoing] Ignore the packet. peer_private_addr={}",
+                                peer_private_addr
+                            );
+                            continue;
+                        }
+                        match payload[0] {
+                            // Afer the handshake
+                            2 => {
+                                let len = peer
+                                    .ts
+                                    .as_mut()
+                                    .write_message(raw_packet.get_bytes(), &mut peer.buf)?;
+                                match gateway::send(main_sock, &peer.buf[..len], &peer.remote_addr)
+                                    .await
+                                {
+                                    Ok(_) => {
+                                        debug!(
+                                        "[Inbound / outgoing] Sent packet. peer_private={}, peer_public={}",
+                                        peer_private_addr, peer.remote_addr
+                                    );
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                        "[Inbound / outgoing] Could not send the data. peer_private={}, reason={:?}",
+                                        peer_private_addr,
+                                        e
+                                    );
+                                    }
+                                }
+                            }
+                            _ => {
+                                debug!(
+                                    "[Inbound / outgoing] Ignore the packet. peer_private_addr={}, reason=Unknown payload type `{}`",
+                                    peer_private_addr,
+                                    payload[0],
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+            Some(Err(e)) => {
+                warn!(
+                    "[Inbound / outgoing] Could not read the UDP packet. reason={:?}",
+                    e
+                );
+                continue;
+            }
+            None => {
+                warn!("[Inbound / outgoing] Could not read the UDP packet. reason=unknown");
                 continue;
             }
         }
