@@ -8,18 +8,18 @@ The Secure peer-to-peer overlay TCP/IP network.
 
 ## Usage
 
-### Run the client
+### Run
 ```sh
 $ cargo build
-$ sudo RUST_BACKTRACE=full target/debug/client -v -n test-dev
+$ sudo RUST_BACKTRACE=full target/debug/rimnet -v -n test-dev
 public key: <KEY>
 listening on 127.0.0.1:7891
 ```
 
 [Option] To run without `sudo`, apply the net_admin capability to the binaly.
 ```
-$ sudo setcap cap_net_admin+epi ./target/debug/client
-$ target/debug/client -v -n test-dev
+$ sudo setcap cap_net_admin+epi ./target/debug/rimnet
+$ target/debug/rimnet -v -n test-dev
 ```
 
 ### Trace packets

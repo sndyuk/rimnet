@@ -5,14 +5,14 @@ use lazy_static::lazy_static;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use packet::{self, ip::Protocol, Builder as _};
+use rimnet::{
+    gateway,
+    gateway::{builder as packet_builder, builder::Build, Packet},
+};
 use snow::{params::NoiseParams, Builder};
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::net::UdpSocket;
-
-use rimnet::{
-    gateway,
-    packet::{self, builder::Build, Packet},
-};
 
 lazy_static! {
     static ref PARAMS: NoiseParams = "Noise_N_25519_ChaChaPoly_BLAKE2s".parse().unwrap();
@@ -57,14 +57,6 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
     println!("connecting to {} ...", server_addr);
 
     // Start handshake
-    let handshake_payload = local_keypair.public;
-    let handshake_len = noise.write_message(&handshake_payload, &mut buf)?;
-    gateway::send(&mut sock, &buf[..handshake_len], &server_addr).await?;
-
-    let mut noise = noise.into_transport_mode()?;
-    println!("session established");
-
-    // Send data
     let cap: [u8; 8] = [
         0b0000_0010,
         0b0000_0010,
@@ -75,17 +67,45 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
         0b0000_1111,
         0b0000_0111,
     ];
-    for _ in 0..10 {
+
+    let handshake_packet = Packet::unchecked(
+        packet_builder::Builder::default()
+            .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
+            .source_port(8080)?
+            .destination_ipv4(Ipv4Addr::new(10, 0, 0, 3))?
+            .destination_port(8080)?
+            .capability(&cap)?
+            .add_payload(&local_keypair.public)?
+            .build()?,
+    );
+    println!("{:?}", handshake_packet);
+
+    let handshake_len = noise.write_message(handshake_packet.as_ref(), &mut buf)?;
+    gateway::send(&mut sock, &buf[..handshake_len], &server_addr).await?;
+
+    let mut noise = noise.into_transport_mode()?;
+    println!("session established");
+
+    // Send data
+    for _ in 0..1 {
+        let payload = packet::ip::v4::Builder::default()
+            .source(Ipv4Addr::new(10, 0, 0, 2))?
+            .destination(Ipv4Addr::new(10, 0, 0, 3))?
+            .tcp()?
+            .payload(b"TEST PAYLOAD")?
+            .build()?;
         let packet = Packet::unchecked(
-            packet::builder::Builder::default()
+            packet_builder::Builder::default()
                 .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
                 .source_port(8080)?
                 .destination_ipv4(Ipv4Addr::new(10, 0, 0, 3))?
                 .destination_port(8080)?
                 .capability(&cap)?
-                .add_payload(b"TEST DATA")?
+                .add_payload(&payload)?
                 .build()?,
         );
+        println!("{:?}", packet);
+        println!("{:?}", packet::ip::v4::Packet::unchecked(payload));
         let len = noise.write_message(packet.as_ref(), &mut buf)?;
         gateway::send(&mut sock, &buf[..len], &server_addr).await?;
     }

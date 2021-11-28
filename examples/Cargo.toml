@@ -6,3 +6,4 @@ publish = false
 
 [dev-dependencies]
 rimnet = { version = "0.1.0", path = "../" }
+packet = "0.1"

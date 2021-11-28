@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::net::Ipv4Addr;
 
-use crate::packet::packet::Packet;
+use crate::gateway::{Packet, HEADER_FIX_LEN};
 
 pub trait Build {
     fn with(buffer: Vec<u8>) -> Result<Self>
@@ -16,29 +16,41 @@ pub trait Build {
 pub struct Builder {
     version: u8,
     header_buffer: Packet<Vec<u8>>,
+    capability_len: u8,
     payload_buffer: Vec<u8>,
 }
 
 impl Build for Builder {
     fn with(buffer: Vec<u8>) -> Result<Self> {
         Ok(Builder {
-            version: 1,
+            version: 0,
             header_buffer: Packet::unchecked(buffer),
+            capability_len: 0,
             payload_buffer: Vec::new(),
         })
     }
 
-    fn build(self) -> Result<Packet<Vec<u8>>> {
-        let header = self.header_buffer.as_ref();
+    fn build(mut self) -> Result<Packet<Vec<u8>>> {
+        let header_len = self.capability_len + HEADER_FIX_LEN as u8;
+        self.header_buffer.set_version(self.version)?;
+        self.header_buffer.set_header_len(header_len)?;
+        self.header_buffer
+            .set_total_len(header_len as u16 + self.payload_buffer.len() as u16)?;
         Ok(Packet::unchecked(
-            [header, self.payload_buffer.as_ref()].concat(),
+            [
+                &self.header_buffer.as_ref()[..header_len as usize],
+                self.payload_buffer.as_ref(),
+            ]
+            .concat(),
         ))
     }
 }
 
 impl Default for Builder {
     fn default() -> Self {
-        Builder::with(Vec::new()).unwrap()
+        let mut buffer = Vec::with_capacity(4096);
+        unsafe { buffer.set_len(4096) };
+        Builder::with(buffer).unwrap()
     }
 }
 
@@ -69,6 +81,7 @@ impl Builder {
 
     /// Capability.
     pub fn capability(mut self, value: &[u8]) -> Result<Self> {
+        self.capability_len = value.len() as u8;
         self.header_buffer.set_capability(value)?;
         Ok(self)
     }
