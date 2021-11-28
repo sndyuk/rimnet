@@ -11,7 +11,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 ### Run
 ```sh
 $ cargo build
-$ sudo RUST_BACKTRACE=full target/debug/rimnet -v -n test-dev
+$ sudo RUST_BACKTRACE=full target/debug/rimnet -v -n test-dev --ipv4 10.0.0.3
 public key: <KEY>
 listening on 127.0.0.1:7891
 ```
@@ -19,7 +19,7 @@ listening on 127.0.0.1:7891
 [Option] To run without `sudo`, apply the net_admin capability to the binaly.
 ```
 $ sudo setcap cap_net_admin+epi ./target/debug/rimnet
-$ target/debug/rimnet -v -n test-dev
+$ target/debug/rimnet -v -n test-dev --ipv4 10.0.0.3
 ```
 
 ### Trace packets

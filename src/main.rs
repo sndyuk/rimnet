@@ -16,7 +16,7 @@ use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio_util::codec::FramedRead;
-use tun::{AsyncDevice, TunPacketCodec};
+use tun::{AsyncDevice, TunPacket, TunPacketCodec};
 
 mod gateway;
 mod inbound;
@@ -32,6 +32,8 @@ struct Opts {
     tun_device_name: String,
     #[clap(short, long, default_value = "7891")]
     port: u16,
+    #[clap(long)]
+    ipv4: String,
     #[clap(short, long, default_value = "1500")]
     mtu: i32,
     #[clap(short, long)]
@@ -51,9 +53,14 @@ async fn main() -> Result<()> {
         .init();
 
     // Start the inbound network
-    let inbound = inbound::run(&opts.tun_device_name, opts.mtu).await?;
+    let inbound = inbound::run(
+        &opts.tun_device_name,
+        &opts.ipv4.parse::<Ipv4Addr>()?,
+        opts.mtu,
+    )
+    .await?;
     let (inbound_reader, mut inbound_writer) = tokio::io::split(inbound);
-    let codec = TunPacketCodec::new(true, opts.mtu);
+    let codec = TunPacketCodec::new(false, opts.mtu);
     let mut frame_inbound_reader = FramedRead::new(inbound_reader, codec);
 
     // Listen the tunnel(encrypted payload <==> raw payload) traffic port
@@ -161,7 +168,6 @@ impl PrivateNetRegistry for PrivateNet {
 
 struct Peer {
     ts: Box<TransportState>,
-    buf: Vec<u8>,
     remote_addr: Box<SocketAddr>,
 }
 
@@ -215,17 +221,17 @@ async fn listen_inbound_incomming(
                     // Afer the handshake
                     Some(peer) => {
                         log::debug!("[Inbound / incomming] Decrypting the payload");
+                        let mut buf = [0u8; 65535];
                         match peer
                             .ts
                             .as_mut()
-                            .read_message(encrypted_packet.as_ref(), &mut peer.buf)
+                            .read_message(encrypted_packet.as_ref(), &mut buf)
                         {
                             Ok(len) => {
                                 log::debug!("[Inbound / incomming] Message decrypted. len={}", len);
-                                let mut packet = gateway::Packet::unchecked(peer.buf.clone());
+                                let mut packet = gateway::Packet::unchecked(buf);
                                 packet.set_total_len(len as u16)?;
-                                println!("{:?}", packet.payload());
-                                tun_writer.write_all(&packet.payload()).await?;
+                                tun_writer.write_all(packet.payload()).await?;
                             }
                             Err(e) => {
                                 log::warn!(
@@ -285,7 +291,6 @@ async fn handshake(
                 peer_remote_addr.ip(),
                 Peer {
                     ts: Box::new(hs.into_transport_mode()?),
-                    buf: vec![0u8; 65535],
                     remote_addr: Box::new(peer_remote_addr),
                 },
             );
@@ -315,20 +320,42 @@ async fn listen_inbound_outgoing(
     private_key: Vec<u8>,
 ) -> Result<()> {
     let mut peers: HashMap<Ipv4Addr, Peer> = HashMap::new();
+
     loop {
         match tun_reader.next().await {
             Some(Ok(raw_packet)) => {
-                let packet = packet::ip::v4::Packet::unchecked(raw_packet.get_bytes());
-                let peer_private_addr = packet.source();
-                let private_net = private_net.lock().await;
+                let raw_packet_bytes = raw_packet.get_bytes();
+                let packet = match raw_packet_bytes[0] >> 4 {
+                    4 => packet::ip::v4::Packet::unchecked(raw_packet_bytes),
+                    6 => {
+                        log::debug!(
+                            "Drop the packet. protocol=IPv6, data={:?}",
+                            raw_packet_bytes
+                        );
+                        continue;
+                    }
+                    _ => {
+                        log::debug!(
+                            "Drop the packet. protocol=unknown, data={:?}",
+                            raw_packet_bytes
+                        );
+                        continue;
+                    }
+                };
+                let peer_private_addr = packet.destination();
+                if peer_private_addr.is_multicast() || peer_private_addr.is_broadcast() {
+                    // Skip multicast and broadcast packet.
+                    continue;
+                }
                 match peers.get_mut(&peer_private_addr) {
                     // Received packet from a unknown peer
                     None => {
+                        let private_net = private_net.lock().await;
                         let remote_node = match private_net.get(&peer_private_addr) {
                             Some(remote_public_key) => remote_public_key,
                             None => {
-                                log::warn!(
-                                    "[Inbound / outgoing] Unknown client. peer_private_addr={}",
+                                log::info!(
+                                    "[Inbound / outgoing] Drop the packet to the unknown peer. The peer must be registered in advance. peer_private_addr={}",
                                     peer_private_addr
                                 );
                                 continue;
@@ -339,7 +366,6 @@ async fn listen_inbound_outgoing(
                             .remote_public_key(&remote_node.public_key)
                             .build_responder()?;
 
-                        println!("test: {:?}", packet.payload());
                         log::debug!("[Inbound / outgoing] Start handshake");
                         let peer_remote_addr = SocketAddr::new(peer_private_addr.into(), main_port);
                         log::debug!("[Inbound / outgoing] peer_remote_addr={}", peer_remote_addr);
@@ -350,7 +376,7 @@ async fn listen_inbound_outgoing(
                         {
                             Ok(_) => {
                                 log::debug!("[Inbound / outgoing] Handshake scceeded and sending the packet");
-                                let len = hs.write_message(raw_packet.get_bytes(), &mut buf)?;
+                                let len = hs.write_message(packet.as_ref(), &mut buf)?;
                                 match gateway::send(main_sock, &buf[..len], &peer_remote_addr).await
                                 {
                                     Ok(_) => {
@@ -383,12 +409,12 @@ async fn listen_inbound_outgoing(
                         match payload[0] {
                             // Afer the handshake
                             2 => {
+                                let buf = &mut [0u8; 65535];
                                 let len = peer
                                     .ts
                                     .as_mut()
-                                    .write_message(raw_packet.get_bytes(), &mut peer.buf)?;
-                                match gateway::send(main_sock, &peer.buf[..len], &peer.remote_addr)
-                                    .await
+                                    .write_message(raw_packet.get_bytes(), buf)?;
+                                match gateway::send(main_sock, &buf[..len], &peer.remote_addr).await
                                 {
                                     Ok(_) => {
                                         log::debug!(

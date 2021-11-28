@@ -22,7 +22,14 @@ impl<B: AsRef<[u8]>> fmt::Debug for Packet<B> {
             .field("destination", &self.destination_ipv4())
             .field("destination port", &self.destination_port())
             .field("capability", &self.capability())
-            .field("payload", &self.payload())
+            .field(
+                "payload",
+                &self
+                    .payload()
+                    .iter()
+                    .map(|n| format!("{:02X}", n))
+                    .collect::<String>(),
+            )
             .finish()
     }
 }

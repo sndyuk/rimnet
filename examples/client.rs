@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use packet::{self, ip::Protocol, Builder as _};
+use packet::{self, ip::Protocol, AsPacket, Builder as _, Packet as _};
 use rimnet::{
     gateway,
     gateway::{builder as packet_builder, builder::Build, Packet},
@@ -88,12 +88,19 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
 
     // Send data
     for _ in 0..1 {
-        let payload = packet::ip::v4::Builder::default()
-            .source(Ipv4Addr::new(10, 0, 0, 2))?
-            .destination(Ipv4Addr::new(10, 0, 0, 3))?
-            .tcp()?
-            .payload(b"TEST PAYLOAD")?
-            .build()?;
+        let payload = packet::ip::v4::Packet::unchecked(
+            packet::ip::v4::Builder::default()
+                .protocol(packet::ip::Protocol::Tcp)?
+                .source(Ipv4Addr::new(10, 0, 0, 2))?
+                .destination(Ipv4Addr::new(10, 0, 0, 3))?
+                .tcp()?
+                .source(8080)?
+                .destination(8080)?
+                .sequence(1)?
+                .acknowledgment(1)?
+                .payload(b"TEST PAYLOAD")?
+                .build()?,
+        );
         let packet = Packet::unchecked(
             packet_builder::Builder::default()
                 .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
@@ -101,11 +108,19 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
                 .destination_ipv4(Ipv4Addr::new(10, 0, 0, 3))?
                 .destination_port(8080)?
                 .capability(&cap)?
-                .add_payload(&payload)?
+                .add_payload(payload.as_ref() as &[u8])?
                 .build()?,
         );
         println!("{:?}", packet);
-        println!("{:?}", packet::ip::v4::Packet::unchecked(payload));
+        println!("{:?}", payload);
+        println!(
+            "{:?}",
+            payload
+                .payload()
+                .iter()
+                .map(|n| format!("{:02X}", n))
+                .collect::<String>()
+        );
         let len = noise.write_message(packet.as_ref(), &mut buf)?;
         gateway::send(&mut sock, &buf[..len], &server_addr).await?;
     }
