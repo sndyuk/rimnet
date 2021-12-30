@@ -5,7 +5,6 @@ use clap::Parser;
 use env_logger::{self, Env};
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use log;
 use packet::{self, Packet};
 use snow::{params::NoiseParams, Builder, TransportState};
 use std::io::prelude::*;
@@ -16,6 +15,8 @@ use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio_util::codec::FramedRead;
+use tracing as log;
+use tracing_subscriber;
 use tun::{AsyncDevice, TunPacket, TunPacketCodec};
 
 mod gateway;
@@ -45,11 +46,19 @@ async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
 
     // Configure logger
-    env_logger::builder()
-        .parse_env(
-            Env::default().filter_or("RIMNET_LOG", if opts.verbose { "DEBUG" } else { "INFO" }),
+    tracing_subscriber::fmt::Subscriber::builder()
+        .with_env_filter(
+            tracing_subscriber::filter::EnvFilter::try_from_env("RIMNET_LOG").unwrap_or_else(
+                |_| {
+                    tracing_subscriber::filter::EnvFilter::new(if opts.verbose {
+                        "DEBUG"
+                    } else {
+                        "INFO"
+                    })
+                },
+            ),
         )
-        .format(|buf, record| writeln!(buf, "{}", record.args()))
+        .pretty()
         .init();
 
     // Start the inbound network
@@ -94,7 +103,7 @@ async fn main() -> Result<()> {
                 Ok(_) => true,
                 Err(e) => {
                     log::error!(
-                        "[Inbound / incomming] Could not recover the error. reason={:?}",
+                        "[Inbound / incomming] Could not recover the error. reason={}",
                         e
                     );
                     false
@@ -122,7 +131,7 @@ async fn main() -> Result<()> {
                 Ok(_) => true,
                 Err(e) => {
                     log::error!(
-                        "[Inbound / outgoing] Could not recover the error. reason={:?}",
+                        "[Inbound / outgoing] Could not recover the error. reason={}",
                         e
                     );
                     false
@@ -209,14 +218,18 @@ async fn listen_inbound_incomming(
                     // Before the handshake. The first packet must be the handshake request.
                     None => {
                         log::debug!("[Inbound / incomming] Start handshake");
-                        handshake(
+                        if handshake(
                             &private_net,
                             &private_key,
                             &mut peers,
                             peer_remote_addr,
                             &encrypted_packet,
                         )
-                        .await?;
+                        .await
+                        .is_err()
+                        {
+                            log::debug!("[Inbound / incomming] Ignore the handshake error");
+                        };
                     }
                     // Afer the handshake
                     Some(peer) => {
@@ -235,18 +248,22 @@ async fn listen_inbound_incomming(
                             }
                             Err(e) => {
                                 log::warn!(
-                                    "[Inbound / incomming] Could not decrypt the payload. Retry handshake. peer_remote={}. reason={:?}",
+                                    "[Inbound / incomming] Could not decrypt the payload. Retry handshake. peer_remote={}. reason={}",
                                     peer_remote_addr, e
                                 );
                                 peers.remove(&peer_remote_addr.ip());
-                                handshake(
+                                if handshake(
                                     &private_net,
                                     &private_key,
                                     &mut peers,
                                     peer_remote_addr,
                                     &encrypted_packet,
                                 )
-                                .await?;
+                                .await
+                                .is_err()
+                                {
+                                    log::debug!("[Inbound / incomming] Ignore the handshake error");
+                                };
                             }
                         }
                     }
@@ -254,7 +271,7 @@ async fn listen_inbound_incomming(
             }
             Err(e) => {
                 log::debug!(
-                    "[Inbound / incomming] Could not read the UDP packet. {:?}",
+                    "[Inbound / incomming] Could not read the UDP packet. reason={}",
                     e
                 );
                 continue;
@@ -275,6 +292,7 @@ async fn handshake(
         .build_responder()?;
 
     let mut buf = vec![0u8; 65535];
+    log::debug!("[Inbound / incomming] len={}", encrypted_packet.len());
     match hs.read_message(encrypted_packet.as_ref(), &mut buf) {
         Ok(payload_len) => {
             log::debug!("[Inbound / incomming] Handshake scceeded");
@@ -303,7 +321,7 @@ async fn handshake(
         }
         Err(e) => {
             log::warn!(
-                "[Inbound / incomming] Handshake failed. peer_remote={}, reason={:?}",
+                "[Inbound / incomming] Handshake failed. peer_remote={}, reason={}",
                 peer_remote_addr,
                 e
             );
@@ -329,14 +347,14 @@ async fn listen_inbound_outgoing(
                     4 => packet::ip::v4::Packet::unchecked(raw_packet_bytes),
                     6 => {
                         log::debug!(
-                            "Drop the packet. protocol=IPv6, data={:?}",
+                            "[Inbound / outgoing] Drop the packet. protocol=IPv6, data={:?}",
                             raw_packet_bytes
                         );
                         continue;
                     }
                     _ => {
                         log::debug!(
-                            "Drop the packet. protocol=unknown, data={:?}",
+                            "[Inbound / outgoing] Drop the packet. protocol=unknown, data={:?}",
                             raw_packet_bytes
                         );
                         continue;
@@ -386,12 +404,12 @@ async fn listen_inbound_outgoing(
                                                 );
                                     }
                                     Err(e) => {
-                                        log::warn!("[Inbound / outgoing] Could not send the packet. reason={:?}", e);
+                                        log::warn!("[Inbound / outgoing] Could not send the packet. reason={}", e);
                                     }
                                 }
                             }
                             Err(e) => {
-                                log::warn!("[Inbound / outgoing] Handshake failed. peer_private={}, reason={:?}", peer_private_addr, e);
+                                log::warn!("[Inbound / outgoing] Handshake failed. peer_private={}, reason={}", peer_private_addr, e);
                             }
                         }
                     }
@@ -424,7 +442,7 @@ async fn listen_inbound_outgoing(
                                     }
                                     Err(e) => {
                                         log::warn!(
-                                        "[Inbound / outgoing] Could not send the data. peer_private={}, reason={:?}",
+                                        "[Inbound / outgoing] Could not send the data. peer_private={}, reason={}",
                                         peer_private_addr,
                                         e
                                     );
@@ -445,7 +463,7 @@ async fn listen_inbound_outgoing(
             }
             Some(Err(e)) => {
                 log::warn!(
-                    "[Inbound / outgoing] Could not read the UDP packet. reason={:?}",
+                    "[Inbound / outgoing] Could not read the UDP packet. reason={}",
                     e
                 );
                 continue;

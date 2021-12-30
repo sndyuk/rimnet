@@ -78,9 +78,11 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
             .add_payload(&local_keypair.public)?
             .build()?,
     );
-    println!("{:?}", handshake_packet);
+    println!("handshake packet: {:?}", handshake_packet);
 
     let handshake_len = noise.write_message(handshake_packet.as_ref(), &mut buf)?;
+
+    println!("handshake packet length: {:?}", handshake_len);
     gateway::send(&mut sock, &buf[..handshake_len], &server_addr).await?;
 
     let mut noise = noise.into_transport_mode()?;
@@ -111,10 +113,10 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
                 .add_payload(payload.as_ref() as &[u8])?
                 .build()?,
         );
-        println!("{:?}", packet);
-        println!("{:?}", payload);
+        println!("packet: {:?}", packet);
+        println!("payload: {:?}", payload);
         println!(
-            "{:?}",
+            "payload(HEX): {:?}",
             payload
                 .payload()
                 .iter()
