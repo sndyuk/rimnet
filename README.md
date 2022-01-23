@@ -4,6 +4,7 @@ Secure container anywahere.
 The Secure peer-to-peer overlay TCP/IP network.
 
 - Noise protocol / Asymmetric Encryption
+- Ethereum
 - eBPF
 
 ## Usage
@@ -66,3 +67,9 @@ From the host machine
 ```sh
 $ cargo run --example inbound_incomming -- --key <KEY> --host-ipv4 10.0.254.254 -p 7891
 ```
+
+
+#### TODO
+- [ ] Add CLI command to handshake with remote agent
+- [ ] Extract public I/F for using external datastores to store agents and private networks information
+- [ ] TBD

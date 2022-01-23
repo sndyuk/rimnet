@@ -214,7 +214,7 @@ async fn listen_inbound_incomming(
                     // Afer the handshake
                     Some(peer) => {
                         log::debug!("[Inbound / incomming] Decrypting the payload");
-                        let mut buf = [0u8; 65535];
+                        let mut buf = [0u8; 65535]; // TODO Recycle the huge buffer
                         match peer
                             .ts
                             .as_mut()
@@ -271,7 +271,7 @@ async fn handshake(
         .local_private_key(&private_key)
         .build_responder()?;
 
-    let mut buf = vec![0u8; 65535];
+    let mut buf = vec![0u8; 65535]; // TODO Recycle the huge buffer
     log::debug!("[Inbound / incomming] len={}", encrypted_packet.len());
     match hs.read_message(encrypted_packet.as_ref(), &mut buf) {
         Ok(payload_len) => {
@@ -362,19 +362,20 @@ async fn listen_inbound_outgoing(
                         let mut hs = Builder::new(PARAMS.clone())
                             .local_private_key(&private_key)
                             .remote_public_key(&remote_node.public_key)
-                            .build_responder()?;
+                            .build_initiator()?;
 
                         log::debug!("[Inbound / outgoing] Start handshake");
-                        let peer_remote_addr = SocketAddr::new(peer_private_addr.into(), main_port);
+                        let peer_remote_addr = SocketAddr::new(remote_node.public_addr, main_port);
                         log::debug!("[Inbound / outgoing] peer_remote_addr={}", peer_remote_addr);
-                        let mut buf = vec![0u8; 65535];
+                        let mut buf = vec![0u8; 65535]; // TODO Recycle the huge buffer
                         let handshake_len = hs.write_message(&[], &mut buf)?;
                         match gateway::send(main_sock, &buf[..handshake_len], &peer_remote_addr)
                             .await
                         {
                             Ok(_) => {
                                 log::debug!("[Inbound / outgoing] Handshake scceeded and sending the packet");
-                                let len = hs.write_message(packet.as_ref(), &mut buf)?;
+                                let mut ts = hs.into_transport_mode()?;
+                                let len = ts.write_message(packet.as_ref(), &mut buf)?;
                                 match gateway::send(main_sock, &buf[..len], &peer_remote_addr).await
                                 {
                                     Ok(_) => {
@@ -382,6 +383,13 @@ async fn listen_inbound_outgoing(
                                                     "[Inbound / outgoing] Session established: peer_private={}, peer_remote={}",
                                                     peer_private_addr, peer_remote_addr
                                                 );
+                                        peers.insert(
+                                            peer_private_addr,
+                                            Peer {
+                                                ts: Box::new(ts),
+                                                remote_addr: Box::new(peer_remote_addr),
+                                            },
+                                        );
                                     }
                                     Err(e) => {
                                         log::warn!("[Inbound / outgoing] Could not send the packet. reason={}", e);
@@ -404,38 +412,24 @@ async fn listen_inbound_outgoing(
                             );
                             continue;
                         }
-                        match payload[0] {
-                            // Afer the handshake
-                            2 => {
-                                let buf = &mut [0u8; 65535];
-                                let len = peer
-                                    .ts
-                                    .as_mut()
-                                    .write_message(raw_packet.get_bytes(), buf)?;
-                                match gateway::send(main_sock, &buf[..len], &peer.remote_addr).await
-                                {
-                                    Ok(_) => {
-                                        log::debug!(
+                        let buf = &mut [0u8; 65535]; // TODO Recycle the huge buffer
+                        let len = peer
+                            .ts
+                            .as_mut()
+                            .write_message(raw_packet.get_bytes(), buf)?;
+                        match gateway::send(main_sock, &buf[..len], &peer.remote_addr).await {
+                            Ok(_) => {
+                                log::debug!(
                                         "[Inbound / outgoing] Sent packet. peer_private={}, peer_public={}",
                                         peer_private_addr, peer.remote_addr
                                     );
-                                    }
-                                    Err(e) => {
-                                        log::warn!(
+                            }
+                            Err(e) => {
+                                log::warn!(
                                         "[Inbound / outgoing] Could not send the data. peer_private={}, reason={}",
                                         peer_private_addr,
                                         e
                                     );
-                                    }
-                                }
-                            }
-                            _ => {
-                                log::debug!(
-                                    "[Inbound / outgoing] Ignore the packet. peer_private_addr={}, reason=Unknown payload type `{}`",
-                                    peer_private_addr,
-                                    payload[0],
-                                );
-                                continue;
                             }
                         }
                     }
