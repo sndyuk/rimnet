@@ -18,5 +18,5 @@ sudo ip netns exec rimnet_1 sudo ip link delete veth1-rimnet
 sudo ip netns del rimnet_1
 
 # Configure routing
-sudo iptables -t nat -D POSTROUTING -s 10.0.0.0/24 --j MASQUERADE
-sudo iptables -t filter -D FORWARD -d 10.0.0.0/24 -j ACCEPT
+sudo iptables -t nat -D POSTROUTING -s 10.0.254.0/24 -j MASQUERADE
+sudo iptables -t filter -D FORWARD -d 10.0.254.0/24 -j ACCEPT

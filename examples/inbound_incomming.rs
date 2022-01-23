@@ -25,7 +25,7 @@ struct Opts {
     key: String,
     #[clap(long, default_value = "127.0.0.1")]
     host_ipv4: String,
-    #[clap(long, default_value = "10.0.0.1")]
+    #[clap(long, default_value = "10.0.254.1")]
     target_public_ipv4: String,
     #[clap(short, long, default_value = "7891")]
     port: u16,
@@ -107,20 +107,16 @@ async fn send_sample_messages(
     for _ in 0..1 {
         let payload = packet::ip::v4::Packet::unchecked(
             packet::ip::v4::Builder::default()
-                .protocol(packet::ip::Protocol::Tcp)?
+                .protocol(packet::ip::Protocol::Udp)?
                 .id(44616)?
                 // .flags(packet::ip::v4::Flags::MORE_FRAGMENTS)?
                 .ttl(64)?
                 .source(Ipv4Addr::new(10, 0, 0, 2))?
                 .destination(Ipv4Addr::new(10, 0, 0, 3))?
-                .tcp()?
+                .udp()?
                 .source(8080)?
                 .destination(8080)?
-                .sequence(0)?
-                .acknowledgment(0)?
-                .window(28944)?
-                // .flags(packet::tcp::Flags::SYN)?
-                .payload(b"GET / HTTP/1.1\nHost: 10.0.0.3\nContent-Type: *\n")?
+                .payload(b"HELLO RIMNET\n")?
                 .build()?,
         );
         let packet = Packet::unchecked(

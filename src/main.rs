@@ -31,6 +31,8 @@ lazy_static! {
 struct Opts {
     #[clap(short = 'n', long)]
     tun_device_name: String,
+    #[clap(long, default_value = "10.0.254.1")]
+    public_ipv4: String,
     #[clap(short, long, default_value = "7891")]
     port: u16,
     #[clap(long)]
@@ -73,7 +75,8 @@ async fn main() -> Result<()> {
     let mut frame_inbound_reader = FramedRead::new(inbound_reader, codec);
 
     // Listen the tunnel(encrypted payload <==> raw payload) traffic port
-    let tunnel_sock_addr = Arc::new(UdpSocket::bind(format!("10.0.0.1:{}", opts.port)).await?);
+    let tunnel_sock_addr =
+        Arc::new(UdpSocket::bind(format!("{}:{}", opts.public_ipv4, opts.port)).await?);
     log::info!(
         "The tunnel listening on {:?}",
         tunnel_sock_addr.local_addr()?

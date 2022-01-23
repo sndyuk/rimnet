@@ -23,7 +23,7 @@ $ ./clean_netns.sh
 $ cargo build
 $ sudo ip netns exec rimnet_1 sudo RUST_BACKTRACE=full target/debug/rimnet -v -n test-dev --ipv4 10.0.0.3
 public key: <KEY>
-listening on 10.0.0.1:7891
+listening on 10.0.254.1:7891
 ```
 
 [Option] To run without `sudo`, apply the net_admin capability to the binaly.
@@ -64,5 +64,5 @@ $ sudo ip netns exec rimnet_1 su - `whoami` -c "cd `pwd` && cargo run --example 
 
 From the host machine
 ```sh
-$ cargo run --example inbound_incomming -- --key <KEY> --host-ipv4 10.0.0.254 -p 7891
+$ cargo run --example inbound_incomming -- --key <KEY> --host-ipv4 10.0.254.254 -p 7891
 ```
