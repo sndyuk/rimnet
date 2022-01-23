@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
             tracing_subscriber::filter::EnvFilter::try_from_env("RIMNET_LOG").unwrap_or_else(
                 |_| {
                     tracing_subscriber::filter::EnvFilter::new(if opts.verbose {
-                        "DEBUG"
+                        "TRACE"
                     } else {
                         "INFO"
                     })
@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
     let mut frame_inbound_reader = FramedRead::new(inbound_reader, codec);
 
     // Listen the tunnel(encrypted payload <==> raw payload) traffic port
-    let tunnel_sock_addr = Arc::new(UdpSocket::bind(format!("127.0.0.1:{}", opts.port)).await?);
+    let tunnel_sock_addr = Arc::new(UdpSocket::bind(format!("10.0.0.1:{}", opts.port)).await?);
     log::info!(
         "The tunnel listening on {:?}",
         tunnel_sock_addr.local_addr()?
@@ -188,29 +188,6 @@ async fn listen_inbound_incomming(
 ) -> Result<()> {
     // Key: public IPv4 of the peer
     let mut peers: HashMap<IpAddr, Peer> = HashMap::new();
-
-    /*
-                                    let mut pos = 0;
-                                for i in 0..payload.len() {
-                                    if (payload[i] as char) == '\n' {
-                                        pos = i;
-                                        break;
-                                    }
-                                }
-                                if pos == 0 {
-                                    debug!(
-                                        "[Inbound / outgoing] Ignore the packet. peer_private_addr={}",
-                                        peer_private_addr
-                                    );
-                                    continue;
-                                }
-                                let remote_public_key = &payload[1..pos];
-                                let handshake_message = &payload[pos..];
-                                let mut hs = Builder::new(PARAMS.clone())
-                                    .local_private_key(&private_key)
-                                    .remote_public_key(remote_public_key)
-                                    .build_responder()?;
-    */
     loop {
         match gateway::recv(main_sock).await {
             Ok((encrypted_packet, peer_remote_addr)) => {

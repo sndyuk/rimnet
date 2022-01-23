@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use packet::{self, ip::Protocol, AsPacket, Builder as _, Packet as _};
+use packet::{self, ip::Protocol, tcp::Flags, AsPacket, Builder as _, Packet as _};
 use rimnet::{
     gateway,
     gateway::{builder as packet_builder, builder::Build, Packet},
@@ -23,6 +23,10 @@ lazy_static! {
 struct Opts {
     #[clap(short, long)]
     key: String,
+    #[clap(long, default_value = "127.0.0.1")]
+    host_ipv4: String,
+    #[clap(long, default_value = "10.0.0.1")]
+    target_public_ipv4: String,
     #[clap(short, long, default_value = "7891")]
     port: u16,
 }
@@ -31,16 +35,27 @@ struct Opts {
 async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
     let remote_public_key = opts.key;
+    let host_ipv4 = opts.host_ipv4;
+    let target_public_ipv4 = opts.target_public_ipv4;
     let port = opts.port;
     println!("public key: {:?}", remote_public_key);
-    send_sample_messages(&base64::decode(remote_public_key)?, port)
-        .await
-        .context("Failed to run a client")?;
+    send_sample_messages(
+        &base64::decode(remote_public_key)?,
+        &host_ipv4,
+        &target_public_ipv4,
+        port,
+    )
+    .await?;
     println!("all done.");
     Ok(())
 }
 
-async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<()> {
+async fn send_sample_messages(
+    remote_public_key: &Vec<u8>,
+    host_ipv4: &str,
+    target_public_ipv4: &str,
+    port: u16,
+) -> Result<()> {
     let mut buf = vec![0u8; 65535];
 
     let builder: Builder<'_> = Builder::new(PARAMS.clone());
@@ -51,9 +66,9 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
         .build_initiator()?;
 
     // Connect to the remote client
-    let mut sock = UdpSocket::bind("127.0.0.1:0").await?;
+    let mut sock = UdpSocket::bind(format!("{}:0", host_ipv4)).await?;
     println!("binded to the local address {}", sock.local_addr()?);
-    let server_addr = format!("127.0.0.1:{}", port).parse::<SocketAddr>()?;
+    let server_addr = format!("{}:{}", target_public_ipv4, port).parse::<SocketAddr>()?;
     println!("connecting to {} ...", server_addr);
 
     // Start handshake
@@ -93,14 +108,19 @@ async fn send_sample_messages(remote_public_key: &Vec<u8>, port: u16) -> Result<
         let payload = packet::ip::v4::Packet::unchecked(
             packet::ip::v4::Builder::default()
                 .protocol(packet::ip::Protocol::Tcp)?
+                .id(44616)?
+                // .flags(packet::ip::v4::Flags::MORE_FRAGMENTS)?
+                .ttl(64)?
                 .source(Ipv4Addr::new(10, 0, 0, 2))?
                 .destination(Ipv4Addr::new(10, 0, 0, 3))?
                 .tcp()?
                 .source(8080)?
                 .destination(8080)?
-                .sequence(1)?
-                .acknowledgment(1)?
-                .payload(b"TEST PAYLOAD")?
+                .sequence(0)?
+                .acknowledgment(0)?
+                .window(28944)?
+                // .flags(packet::tcp::Flags::SYN)?
+                .payload(b"GET / HTTP/1.1\nHost: 10.0.0.3\nContent-Type: *\n")?
                 .build()?,
         );
         let packet = Packet::unchecked(
