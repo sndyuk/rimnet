@@ -9,14 +9,11 @@ use packet::{self, ip::Protocol, tcp::Flags, AsPacket, Builder as _, Packet as _
 use rimnet::{
     gateway,
     gateway::{builder as packet_builder, builder::Build, Packet},
+    private_net,
 };
 use snow::{params::NoiseParams, Builder};
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::net::UdpSocket;
-
-lazy_static! {
-    static ref PARAMS: NoiseParams = "Noise_N_25519_ChaChaPoly_BLAKE2s".parse().unwrap();
-}
 
 #[derive(Parser)]
 #[clap()]
@@ -58,7 +55,7 @@ async fn send_sample_messages(
 ) -> Result<()> {
     let mut buf = vec![0u8; 65535];
 
-    let builder: Builder<'_> = Builder::new(PARAMS.clone());
+    let builder: Builder<'_> = Builder::new(private_net::NOISE_PARAMS.clone());
     let local_keypair = builder.generate_keypair()?;
     let mut noise = builder
         .local_private_key(&local_keypair.private)

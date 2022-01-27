@@ -2,4 +2,4 @@ mod errors;
 
 pub mod gateway;
 mod inbound;
-mod private_net;
+pub mod private_net;
