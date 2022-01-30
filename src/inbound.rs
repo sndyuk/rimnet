@@ -3,6 +3,7 @@ extern crate base64;
 use anyhow::{anyhow, Result};
 use snow::Keypair;
 use std::net::{IpAddr, Ipv4Addr};
+use std::str::FromStr;
 
 use crate::gateway;
 use crate::private_net::*;
@@ -24,7 +25,90 @@ pub struct InboundConfig {
     pub private_ipv4: Ipv4Addr,
     pub public_ipv4: Ipv4Addr,
     pub public_port: u16,
-    pub keypair: Keypair,
+    pub private_key: Vec<u8>,
+    pub public_key: Vec<u8>,
+}
+
+/// InboundConfig builder.
+pub struct InboundConfigBuilder {
+    name: Option<String>,
+    mtu: i32,
+    private_ipv4: Option<Ipv4Addr>,
+    public_ipv4: Option<Ipv4Addr>,
+    public_port: u16,
+    private_key: Option<Vec<u8>>,
+    public_key: Option<Vec<u8>>,
+}
+
+impl InboundConfigBuilder {
+    pub fn new() -> Result<InboundConfigBuilder> {
+        Ok(InboundConfigBuilder {
+            name: None,
+            mtu: 1500,
+            private_ipv4: None,
+            public_ipv4: None,
+            public_port: 7891,
+            private_key: None,
+            public_key: None,
+        })
+    }
+
+    pub fn build(mut self) -> Result<InboundConfig> {
+        Ok(InboundConfig {
+            name: self.name.unwrap_or(String::from("rimnet")),
+            mtu: self.mtu,
+            private_ipv4: self
+                .private_ipv4
+                .unwrap_or("192.168.100.10".parse::<Ipv4Addr>()?),
+            public_ipv4: self.public_ipv4.unwrap_or("0.0.0.0".parse::<Ipv4Addr>()?),
+            public_port: self.public_port,
+            private_key: self
+                .private_key
+                .ok_or_else(|| anyhow!("private_key is required"))?,
+            public_key: self
+                .public_key
+                .ok_or_else(|| anyhow!("public_key is required"))?,
+        })
+    }
+}
+
+impl Default for InboundConfigBuilder {
+    fn default() -> Self {
+        InboundConfigBuilder::new().unwrap()
+    }
+}
+
+impl InboundConfigBuilder {
+    pub fn name<S: Into<String>>(mut self, name: S) -> Result<Self> {
+        self.name = Some(name.into());
+        Ok(self)
+    }
+
+    pub fn mtu(mut self, mtu: i32) -> Result<Self> {
+        self.mtu = mtu;
+        Ok(self)
+    }
+
+    pub fn private_ipv4(mut self, private_ipv4: Ipv4Addr) -> Result<Self> {
+        self.private_ipv4 = Some(private_ipv4);
+        Ok(self)
+    }
+
+    pub fn public_ipv4(mut self, public_ipv4: Ipv4Addr) -> Result<Self> {
+        self.public_ipv4 = Some(public_ipv4);
+        Ok(self)
+    }
+
+    pub fn public_port(mut self, public_port: u16) -> Result<Self> {
+        self.public_port = public_port;
+        Ok(self)
+    }
+
+    pub fn keypair(mut self, private_key: Vec<u8>, public_key: Vec<u8>) -> Result<Self> {
+        self.private_key = Some(private_key);
+        self.public_key = Some(public_key);
+        Ok(self)
+    }
 }
 
 fn create_tun_device(config: &InboundConfig) -> Result<AsyncDevice> {
@@ -69,7 +153,7 @@ pub async fn run(config: InboundConfig) -> Result<()> {
     let inbound_incomming_loop = tokio::spawn({
         let tunnel_sock_addr = tunnel_sock_addr.clone();
         let public_keys = public_keys.clone();
-        let private_key = config.keypair.private.clone();
+        let private_key = config.private_key.clone();
         async move {
             match listen_inbound_incomming(
                 &mut inbound_writer,
@@ -95,7 +179,7 @@ pub async fn run(config: InboundConfig) -> Result<()> {
     // Inbound outging loop
     let inbound_outgoing_loop = tokio::spawn({
         let tunnel_sock_addr = tunnel_sock_addr.clone();
-        let private_key = config.keypair.private.clone();
+        let private_key = config.private_key.clone();
         let public_keys = public_keys.clone();
         async move {
             match listen_inbound_outgoing(

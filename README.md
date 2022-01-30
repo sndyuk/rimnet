@@ -19,18 +19,18 @@ $ ./create_netns.sh
 $ ./clean_netns.sh
 ```
 
-#### Run the agent on the sandbox namespace
+#### Run the sample agent on the sandbox namespace
 ```sh
-$ cargo build
-$ sudo ip netns exec rimnet_1 sudo RUST_BACKTRACE=full target/debug/rimnet -v -n test-dev --private-ipv4 10.0.0.3
+$ cargo build --examples
+$ sudo ip netns exec rimnet_1 sudo RUST_BACKTRACE=full target/debug/examples/client_1 -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1
 public key: <KEY>
 listening on 10.0.254.1:7891
 ```
 
-[Option] To run without `sudo`, apply the net_admin capability to the binaly.
+[Option] To run without `sudo`, apply the net_admin capability to the binary.
 ```
-$ sudo setcap cap_net_admin+epi ./target/debug/rimnet
-$ sudo ip netns exec rimnet_1 target/debug/rimnet -v -n test-dev --private-ipv4 10.0.0.3
+$ sudo setcap cap_net_admin+epi target/debug/examples/client_1
+$ sudo ip netns exec rimnet_1 target/debug/examples/client_1 -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1
 ```
 
 ### Trace packets
