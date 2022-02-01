@@ -4,11 +4,10 @@ use std::net::Ipv4Addr;
 
 use anyhow::Result;
 use clap::Parser;
-use snow::Builder;
 use tracing as log;
 use tracing_subscriber;
 
-use rimnet::{inbound, private_net};
+use rimnet::*;
 
 #[derive(Parser)]
 #[clap()]
@@ -47,29 +46,29 @@ async fn main() -> Result<()> {
         .pretty()
         .init();
 
-    // Prepare keypair for Noise
-    let keypair = Builder::new(private_net::NOISE_PARAMS.clone()).generate_keypair()?;
+    // Prepare keypair of the agent
+    let keypair = generate_keypair()?;
     log::info!("public key: {:?}", base64::encode(&keypair.public));
 
     // Start the inbound network
-    let mut inbound_config_builder =
-        inbound::InboundConfigBuilder::new()?.keypair(keypair.private, keypair.public)?;
+    let mut network_config_builder =
+        NetworkConfigBuilder::new()?.keypair(keypair.private, keypair.public)?;
 
     if let Some(v) = opts.tun_device_name {
-        inbound_config_builder = inbound_config_builder.name(v)?;
+        network_config_builder = network_config_builder.name(v)?;
     };
     if let Some(v) = opts.mtu {
-        inbound_config_builder = inbound_config_builder.mtu(v)?;
+        network_config_builder = network_config_builder.mtu(v)?;
     }
     if let Some(v) = opts.private_ipv4 {
-        inbound_config_builder = inbound_config_builder.private_ipv4(v.parse::<Ipv4Addr>()?)?;
+        network_config_builder = network_config_builder.private_ipv4(v.parse::<Ipv4Addr>()?)?;
     }
     if let Some(v) = opts.public_ipv4 {
-        inbound_config_builder = inbound_config_builder.public_ipv4(v.parse::<Ipv4Addr>()?)?;
+        network_config_builder = network_config_builder.public_ipv4(v.parse::<Ipv4Addr>()?)?;
     }
     if let Some(v) = opts.public_port {
-        inbound_config_builder = inbound_config_builder.public_port(v)?;
+        network_config_builder = network_config_builder.public_port(v)?;
     }
-    inbound::run(inbound_config_builder.build()?).await?;
+    network::run(network_config_builder.build()?).await?;
     Ok(())
 }

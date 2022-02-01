@@ -1,12 +1,8 @@
-extern crate base64;
-
 use anyhow::{anyhow, Result};
-use snow::Keypair;
 use std::net::{IpAddr, Ipv4Addr};
-use std::str::FromStr;
 
 use crate::gateway;
-use crate::private_net::*;
+use crate::network::device::NetworkDevice;
 use futures::StreamExt;
 use packet::{self, Packet};
 use snow::Builder as HandshakeBuilder;
@@ -19,124 +15,23 @@ use tokio_util::codec::FramedRead;
 use tracing as log;
 use tun::{AsyncDevice, TunPacketCodec};
 
-pub struct InboundConfig {
-    pub name: String,
-    pub mtu: i32,
-    pub private_ipv4: Ipv4Addr,
-    pub public_ipv4: Ipv4Addr,
-    pub public_port: u16,
-    pub private_key: Vec<u8>,
-    pub public_key: Vec<u8>,
+use super::config::*;
+use super::state::*;
+
+use lazy_static::lazy_static;
+use snow::params::NoiseParams;
+
+lazy_static! {
+    // TODO Be customizable
+    pub static ref NOISE_PARAMS: NoiseParams = "Noise_N_25519_ChaChaPoly_BLAKE2s".parse().unwrap();
 }
 
-/// InboundConfig builder.
-pub struct InboundConfigBuilder {
-    name: Option<String>,
-    mtu: i32,
-    private_ipv4: Option<Ipv4Addr>,
-    public_ipv4: Option<Ipv4Addr>,
-    public_port: u16,
-    private_key: Option<Vec<u8>>,
-    public_key: Option<Vec<u8>>,
-}
-
-impl InboundConfigBuilder {
-    pub fn new() -> Result<InboundConfigBuilder> {
-        Ok(InboundConfigBuilder {
-            name: None,
-            mtu: 1500,
-            private_ipv4: None,
-            public_ipv4: None,
-            public_port: 7891,
-            private_key: None,
-            public_key: None,
-        })
-    }
-
-    pub fn build(mut self) -> Result<InboundConfig> {
-        Ok(InboundConfig {
-            name: self.name.unwrap_or(String::from("rimnet")),
-            mtu: self.mtu,
-            private_ipv4: self
-                .private_ipv4
-                .unwrap_or("192.168.100.10".parse::<Ipv4Addr>()?),
-            public_ipv4: self.public_ipv4.unwrap_or("0.0.0.0".parse::<Ipv4Addr>()?),
-            public_port: self.public_port,
-            private_key: self
-                .private_key
-                .ok_or_else(|| anyhow!("private_key is required"))?,
-            public_key: self
-                .public_key
-                .ok_or_else(|| anyhow!("public_key is required"))?,
-        })
-    }
-}
-
-impl Default for InboundConfigBuilder {
-    fn default() -> Self {
-        InboundConfigBuilder::new().unwrap()
-    }
-}
-
-impl InboundConfigBuilder {
-    pub fn name<S: Into<String>>(mut self, name: S) -> Result<Self> {
-        self.name = Some(name.into());
-        Ok(self)
-    }
-
-    pub fn mtu(mut self, mtu: i32) -> Result<Self> {
-        self.mtu = mtu;
-        Ok(self)
-    }
-
-    pub fn private_ipv4(mut self, private_ipv4: Ipv4Addr) -> Result<Self> {
-        self.private_ipv4 = Some(private_ipv4);
-        Ok(self)
-    }
-
-    pub fn public_ipv4(mut self, public_ipv4: Ipv4Addr) -> Result<Self> {
-        self.public_ipv4 = Some(public_ipv4);
-        Ok(self)
-    }
-
-    pub fn public_port(mut self, public_port: u16) -> Result<Self> {
-        self.public_port = public_port;
-        Ok(self)
-    }
-
-    pub fn keypair(mut self, private_key: Vec<u8>, public_key: Vec<u8>) -> Result<Self> {
-        self.private_key = Some(private_key);
-        self.public_key = Some(public_key);
-        Ok(self)
-    }
-}
-
-fn create_tun_device(config: &InboundConfig) -> Result<AsyncDevice> {
-    let mut tun = tun::Configuration::default();
-    tun.name(&config.name)
-        .address(&config.private_ipv4)
-        .layer(tun::Layer::L3)
-        .netmask((255, 255, 255, 0))
-        .mtu(config.mtu);
-
-    #[cfg(target_os = "linux")]
-    {
-        tun.platform(|p| {
-            p.packet_information(false);
-        });
-    }
-    tun.up();
-
-    let device = tun::create_as_async(&tun)?;
-    log::debug!("tun created");
-    Ok(device)
-}
-
-pub async fn run(config: InboundConfig) -> Result<()> {
-    let tun_device = create_tun_device(&config)?;
-    let (inbound_reader, mut inbound_writer) = tokio::io::split(tun_device);
-    let codec = TunPacketCodec::new(false, config.mtu);
-    let mut frame_inbound_reader = FramedRead::new(inbound_reader, codec);
+pub async fn run(config: NetworkConfig) -> Result<()> {
+    let mut device = NetworkDevice::<FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>>::create(
+        &config.name,
+        &config.private_ipv4,
+        config.mtu,
+    )?;
 
     // Listen the tunnel(encrypted payload <==> raw payload) traffic port
     let tunnel_sock_addr =
@@ -146,19 +41,19 @@ pub async fn run(config: InboundConfig) -> Result<()> {
         tunnel_sock_addr.local_addr()?
     );
 
-    // Prepare public keys
-    let public_keys = Arc::new(Mutex::new(PrivateNet { db: HashMap::new() }));
+    // Prepare the network
+    let network = Arc::new(Mutex::new(Network::new()?));
 
     // Inbound incomming loop
     let inbound_incomming_loop = tokio::spawn({
         let tunnel_sock_addr = tunnel_sock_addr.clone();
-        let public_keys = public_keys.clone();
+        let network = network.clone();
         let private_key = config.private_key.clone();
         async move {
             match listen_inbound_incomming(
-                &mut inbound_writer,
+                &mut device.writer,
                 &tunnel_sock_addr,
-                public_keys,
+                network,
                 private_key,
             )
             .await
@@ -180,13 +75,13 @@ pub async fn run(config: InboundConfig) -> Result<()> {
     let inbound_outgoing_loop = tokio::spawn({
         let tunnel_sock_addr = tunnel_sock_addr.clone();
         let private_key = config.private_key.clone();
-        let public_keys = public_keys.clone();
+        let network = network.clone();
         async move {
             match listen_inbound_outgoing(
-                &mut frame_inbound_reader,
+                &mut device.reader,
                 &tunnel_sock_addr,
                 config.public_port,
-                public_keys,
+                network,
                 private_key,
             )
             .await
@@ -212,24 +107,28 @@ pub async fn run(config: InboundConfig) -> Result<()> {
 async fn listen_inbound_incomming(
     tun_writer: &mut WriteHalf<AsyncDevice>,
     main_sock: &UdpSocket,
-    private_net: Arc<Mutex<PrivateNet>>,
+    network: Arc<Mutex<Network>>,
     private_key: Vec<u8>,
 ) -> Result<()> {
     // Key: public IPv4 of the peer
-    let mut peers: HashMap<IpAddr, Peer> = HashMap::new();
+    let mut peers_cache: HashMap<IpAddr, Peer> = HashMap::new();
     loop {
         match gateway::recv(main_sock).await {
-            Ok((encrypted_packet, peer_remote_addr)) => {
-                match peers.get_mut(&peer_remote_addr.ip()) {
-                    // Before the handshake. The first packet must be the handshake request.
-                    None => {
+            Ok((mut packet, peer_remote_addr)) => {
+                if !packet.is_valid() {
+                    log::warn!("[Inbound / incomming] Ignore the invalid packet");
+                    continue;
+                }
+                match packet.protocol() {
+                    gateway::packet::Protocol::Handshake => {
+                        // Before the handshake. The first packet must be the handshake request.
                         log::debug!("[Inbound / incomming] Start handshake");
-                        if handshake(
-                            &private_net,
+                        if receive_handshake(
+                            &network,
                             &private_key,
-                            &mut peers,
+                            &mut peers_cache,
                             peer_remote_addr,
-                            &encrypted_packet,
+                            &mut packet,
                         )
                         .await
                         .is_err()
@@ -237,41 +136,41 @@ async fn listen_inbound_incomming(
                             log::debug!("[Inbound / incomming] Ignore the handshake error");
                         };
                     }
-                    // Afer the handshake
-                    Some(peer) => {
-                        log::debug!("[Inbound / incomming] Decrypting the payload");
-                        let mut buf = [0u8; 65535]; // TODO Recycle the huge buffer
-                        match peer
-                            .ts
-                            .as_mut()
-                            .read_message(encrypted_packet.as_ref(), &mut buf)
-                        {
-                            Ok(len) => {
-                                log::debug!("[Inbound / incomming] Message decrypted. len={}", len);
-                                let mut packet = gateway::Packet::unchecked(buf);
-                                packet.set_total_len(len as u16)?;
-                                tun_writer.write_all(packet.payload()).await?;
-                            }
-                            Err(e) => {
-                                log::warn!(
+                    gateway::packet::Protocol::TcpIp => {
+                        match peers_cache.get_mut(&peer_remote_addr.ip()) {
+                            Some(peer) => {
+                                // Afer the handshake
+                                log::debug!("[Inbound / incomming] Decrypting the payload");
+                                match packet.to_tcpip(peer.ts.as_mut()) {
+                                    Ok(tcpip_packet) => {
+                                        log::debug!("[Inbound / incomming] Message decrypted");
+                                        tun_writer.write_all(tcpip_packet.payload()).await?;
+                                    }
+                                    Err(e) => {
+                                        log::warn!(
                                     "[Inbound / incomming] Could not decrypt the payload. Retry handshake. peer_remote={}. reason={}",
-                                    peer_remote_addr, e
+                                    peer_remote_addr, e);
+                                        log::warn!(
+                                            "[Inbound / incomming] Ignore the handshake error"
+                                        );
+                                    }
+                                }
+                            }
+                            None => {
+                                log::info!(
+                                    "[Inbound / incomming] Peer not found. Require handshake first."
                                 );
-                                peers.remove(&peer_remote_addr.ip());
-                                if handshake(
-                                    &private_net,
-                                    &private_key,
-                                    &mut peers,
-                                    peer_remote_addr,
-                                    &encrypted_packet,
-                                )
-                                .await
-                                .is_err()
-                                {
-                                    log::debug!("[Inbound / incomming] Ignore the handshake error");
-                                };
                             }
                         }
+                    }
+                    gateway::packet::Protocol::Knock => {
+                        log::debug!("[Inbound / incomming] Received a knock");
+                    }
+                    prefix => {
+                        log::warn!(
+                            "[Inbound / incomming] Ignore unknown packet. prefix={:?}",
+                            prefix
+                        );
                     }
                 }
             }
@@ -286,31 +185,19 @@ async fn listen_inbound_incomming(
     }
 }
 
-async fn handshake(
-    private_net: &Arc<Mutex<PrivateNet>>,
+async fn receive_handshake(
+    network: &Arc<Mutex<Network>>,
     private_key: &Vec<u8>,
     peers: &mut HashMap<IpAddr, Peer>,
     peer_remote_addr: SocketAddr,
-    encrypted_packet: &Vec<u8>,
+    packet: &mut gateway::packet::Packet<Vec<u8>>,
 ) -> Result<()> {
     let mut hs = HandshakeBuilder::new(NOISE_PARAMS.clone())
         .local_private_key(&private_key)
         .build_responder()?;
-
-    let mut buf = vec![0u8; 65535]; // TODO Recycle the huge buffer
-    log::debug!("[Inbound / incomming] len={}", encrypted_packet.len());
-    match hs.read_message(encrypted_packet.as_ref(), &mut buf) {
-        Ok(payload_len) => {
+    match packet.to_handshake(&mut hs) {
+        Ok(handshake_packet) => {
             log::debug!("[Inbound / incomming] Handshake scceeded");
-            let mut packet = gateway::Packet::unchecked(buf);
-            packet.set_total_len(payload_len as u16)?;
-
-            let remote_pubilc_key = packet.payload();
-            private_net.lock().await.put(
-                &packet.source_ipv4(),
-                peer_remote_addr.ip(),
-                Vec::from(remote_pubilc_key),
-            );
             peers.insert(
                 peer_remote_addr.ip(),
                 Peer {
@@ -318,9 +205,14 @@ async fn handshake(
                     remote_addr: Box::new(peer_remote_addr),
                 },
             );
+            network.lock().await.put(
+                &handshake_packet.source_ipv4(),
+                peer_remote_addr.ip(),
+                handshake_packet.public_key().to_vec(),
+            );
             log::debug!(
                 "[Inbound / incomming] Session established: peer_private={}, peer_remote={}",
-                packet.source_ipv4(),
+                handshake_packet.source_ipv4(),
                 peer_remote_addr
             );
             Ok(())
@@ -340,10 +232,10 @@ async fn listen_inbound_outgoing(
     tun_reader: &mut FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>,
     main_sock: &UdpSocket,
     main_port: u16,
-    private_net: Arc<Mutex<PrivateNet>>,
+    network: Arc<Mutex<Network>>,
     private_key: Vec<u8>,
 ) -> Result<()> {
-    let mut peers: HashMap<Ipv4Addr, Peer> = HashMap::new();
+    let mut peers_cache: HashMap<Ipv4Addr, Peer> = HashMap::new();
 
     loop {
         match tun_reader.next().await {
@@ -352,14 +244,14 @@ async fn listen_inbound_outgoing(
                 let packet = match raw_packet_bytes[0] >> 4 {
                     4 => packet::ip::v4::Packet::unchecked(raw_packet_bytes),
                     6 => {
-                        log::debug!(
+                        log::warn!(
                             "[Inbound / outgoing] Drop the packet. protocol=IPv6, data={:?}",
                             raw_packet_bytes
                         );
                         continue;
                     }
                     _ => {
-                        log::debug!(
+                        log::warn!(
                             "[Inbound / outgoing] Drop the packet. protocol=unknown, data={:?}",
                             raw_packet_bytes
                         );
@@ -371,11 +263,11 @@ async fn listen_inbound_outgoing(
                     // Skip multicast and broadcast packet.
                     continue;
                 }
-                match peers.get_mut(&peer_private_addr) {
-                    // Received packet from a unknown peer
+                match peers_cache.get_mut(&peer_private_addr) {
+                    // Received packet to an unknown peer.
                     None => {
-                        let private_net = private_net.lock().await;
-                        let remote_node = match private_net.get(&peer_private_addr) {
+                        let network = network.lock().await;
+                        let remote_node = match network.get(&peer_private_addr) {
                             Some(remote_public_key) => remote_public_key,
                             None => {
                                 log::info!(
@@ -409,7 +301,7 @@ async fn listen_inbound_outgoing(
                                                     "[Inbound / outgoing] Session established: peer_private={}, peer_remote={}",
                                                     peer_private_addr, peer_remote_addr
                                                 );
-                                        peers.insert(
+                                        peers_cache.insert(
                                             peer_private_addr,
                                             Peer {
                                                 ts: Box::new(ts),
@@ -427,7 +319,7 @@ async fn listen_inbound_outgoing(
                             }
                         }
                     }
-                    // Received packet from a registered peer
+                    // Received packet to a registered peer
                     Some(peer) => {
                         log::debug!("[Inbound / outgoing] Sending the packet");
                         let payload = packet.payload();

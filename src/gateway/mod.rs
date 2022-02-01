@@ -1,17 +1,15 @@
 extern crate base64;
 
-pub mod builder;
 pub mod packet;
 
 pub use self::packet::Packet;
-pub use self::packet::HEADER_FIX_LEN;
 use tracing as log;
 
 use anyhow::{anyhow, Result};
 use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 
-pub async fn recv(sock: &UdpSocket) -> Result<(Vec<u8>, SocketAddr)> {
+pub async fn recv(sock: &UdpSocket) -> Result<(Packet<Vec<u8>>, SocketAddr)> {
     let mut msg_len_buf = [0u8; 2];
     let (_, src) = sock.peek_from(&mut msg_len_buf).await?;
     let msg_len = ((msg_len_buf[0] as usize) << 8) + (msg_len_buf[1] as usize);
@@ -29,7 +27,7 @@ pub async fn recv(sock: &UdpSocket) -> Result<(Vec<u8>, SocketAddr)> {
     }
     // Trim the message
     let msg = msg_with_pad[2..msg_len + 2].to_vec();
-    Ok((msg, src))
+    Ok((Packet::unchecked(msg), src))
 }
 
 pub async fn send(sock: &UdpSocket, buf: &[u8], to_addr: &SocketAddr) -> Result<()> {

@@ -5,15 +5,19 @@ use lazy_static::lazy_static;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use packet::{self, ip::Protocol, tcp::Flags, AsPacket, Builder as _, Packet as _};
+use packet::{self, tcp::Flags, AsPacket, Builder as packet_builder, Packet as _};
 use rimnet::{
-    gateway,
-    gateway::{builder as packet_builder, builder::Build, Packet},
-    private_net,
+    gateway::{self, packet::Protocol},
+    network,
 };
 use snow::{params::NoiseParams, Builder};
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::net::UdpSocket;
+
+lazy_static! {
+    // TODO Be customizable
+    pub static ref NOISE_PARAMS: NoiseParams = "Noise_N_25519_ChaChaPoly_BLAKE2s".parse().unwrap();
+}
 
 #[derive(Parser)]
 #[clap()]
@@ -55,7 +59,7 @@ async fn send_sample_messages(
 ) -> Result<()> {
     let mut buf = vec![0u8; 65535];
 
-    let builder: Builder<'_> = Builder::new(private_net::NOISE_PARAMS.clone());
+    let builder: Builder<'_> = Builder::new(NOISE_PARAMS.clone());
     let local_keypair = builder.generate_keypair()?;
     let mut noise = builder
         .local_private_key(&local_keypair.private)
@@ -69,40 +73,30 @@ async fn send_sample_messages(
     println!("connecting to {} ...", server_addr);
 
     // Start handshake
-    let cap: [u8; 8] = [
-        0b0000_0010,
-        0b0000_0010,
-        0b0000_0100,
-        0b0000_0100,
-        0b0000_1000,
-        0b0000_1000,
-        0b0000_1111,
-        0b0000_0111,
-    ];
-
-    let handshake_packet = Packet::unchecked(
-        packet_builder::Builder::default()
-            .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
-            .source_port(8080)?
-            .destination_ipv4(Ipv4Addr::new(10, 0, 0, 3))?
-            .destination_port(8080)?
-            .capability(&cap)?
-            .add_payload(&local_keypair.public)?
-            .build()?,
-    );
+    let handshake_packet = gateway::packet::HandshakePacketBuilder::new()?
+        .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
+        .public_key(local_keypair.public)?
+        .build()?;
     println!("handshake packet: {:?}", handshake_packet);
 
     let handshake_len = noise.write_message(handshake_packet.as_ref(), &mut buf)?;
+    println!("encrypted handshake packet length: {:?}", handshake_len);
 
-    println!("handshake packet length: {:?}", handshake_len);
-    gateway::send(&mut sock, &buf[..handshake_len], &server_addr).await?;
+    let packet = gateway::packet::PacketBuilder::new()?
+        .protocol(Protocol::Handshake)?
+        .add_payload(&buf[..handshake_len])?
+        .build()?;
+
+    println!("packet: {:?}", packet);
+
+    gateway::send(&mut sock, packet.as_ref(), &server_addr).await?;
 
     let mut noise = noise.into_transport_mode()?;
     println!("session established");
 
     // Send data
     for _ in 0..1 {
-        let payload = packet::ip::v4::Packet::unchecked(
+        let ipv4_packet = packet::ip::v4::Packet::unchecked(
             packet::ip::v4::Builder::default()
                 .protocol(packet::ip::Protocol::Udp)?
                 .id(44616)?
@@ -116,28 +110,43 @@ async fn send_sample_messages(
                 .payload(b"HELLO RIMNET\n")?
                 .build()?,
         );
-        let packet = Packet::unchecked(
-            packet_builder::Builder::default()
-                .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
-                .source_port(8080)?
-                .destination_ipv4(Ipv4Addr::new(10, 0, 0, 3))?
-                .destination_port(8080)?
-                .capability(&cap)?
-                .add_payload(payload.as_ref() as &[u8])?
-                .build()?,
-        );
-        println!("packet: {:?}", packet);
-        println!("payload: {:?}", payload);
         println!(
             "payload(HEX): {:?}",
-            payload
+            ipv4_packet
                 .payload()
                 .iter()
                 .map(|n| format!("{:02X}", n))
                 .collect::<String>()
         );
-        let len = noise.write_message(packet.as_ref(), &mut buf)?;
-        gateway::send(&mut sock, &buf[..len], &server_addr).await?;
+
+        let cap: [u8; 8] = [
+            0b0000_0010,
+            0b0000_0010,
+            0b0000_0100,
+            0b0000_0100,
+            0b0000_1000,
+            0b0000_1000,
+            0b0000_1111,
+            0b0000_0111,
+        ];
+
+        let tcpip_packet = gateway::packet::TcpIpPacketBuilder::new()?
+            .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
+            .capability(cap.to_vec())?
+            .add_payload(ipv4_packet.as_ref())?
+            .build()?;
+        println!("tcpip packet: {:?}", tcpip_packet);
+
+        let tcpip_len = noise.write_message(tcpip_packet.as_ref(), &mut buf)?;
+        println!("encrypted tcpip packet length: {:?}", tcpip_len);
+
+        let packet = gateway::packet::PacketBuilder::new()?
+            .protocol(Protocol::TcpIp)?
+            .add_payload(&buf[..tcpip_len])?
+            .build()?;
+        println!("packet: {:?}", packet);
+
+        gateway::send(&mut sock, packet.as_ref(), &server_addr).await?;
     }
     Ok(())
 }
