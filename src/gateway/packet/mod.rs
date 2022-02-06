@@ -2,6 +2,9 @@ use anyhow::Result;
 use snow::{HandshakeState, TransportState};
 use std::fmt;
 
+pub mod knock;
+pub use knock::*;
+
 pub mod handshake;
 pub use handshake::*;
 
@@ -83,10 +86,9 @@ impl<B: AsRef<[u8]>> Packet<B> {
     }
 
     pub fn payload(&self) -> &[u8] {
-        let len = self.total_len() as usize - HEADER_FIX_LEN;
         unsafe {
             let ptr = self.buffer.as_ref().as_ptr().add(HEADER_FIX_LEN);
-            std::slice::from_raw_parts(ptr, len)
+            std::slice::from_raw_parts(ptr, self.total_len() as usize - HEADER_FIX_LEN)
         }
     }
 
@@ -119,20 +121,20 @@ impl<B: AsRef<[u8]> + AsMut<[u8]>> Packet<B> {
         Ok(self)
     }
 
-    pub fn set_capability(&mut self, value: &[u8]) -> Result<&mut Self> {
-        let buf = self.buffer.as_mut();
-        buf[HEADER_FIX_LEN..HEADER_FIX_LEN + value.len()].copy_from_slice(value);
-
-        Ok(self)
-    }
-
     // --- Utils
+
+    pub fn to_knock(&mut self) -> Result<Knock<&[u8]>> {
+        assert!(self.protocol() == Protocol::Knock);
+        let knock = Knock::unchecked(self.payload());
+        Ok(knock)
+    }
 
     pub fn to_handshake(&mut self, hs: &mut HandshakeState) -> Result<Handshake<Vec<u8>>> {
         assert!(self.protocol() == Protocol::Handshake);
-        let mut buf = [0u8; 64];
+        let mut buf = [0u8; 127];
         let new_len = hs.read_message(self.payload(), &mut buf)?;
-        let handshake = Handshake::unchecked(new_len as u16, buf[..new_len].to_vec());
+        assert!(new_len <= 127);
+        let handshake = Handshake::unchecked(buf[..new_len].to_vec());
         Ok(handshake)
     }
 

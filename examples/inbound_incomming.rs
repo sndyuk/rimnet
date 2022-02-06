@@ -3,13 +3,10 @@ extern crate tun;
 
 use lazy_static::lazy_static;
 
-use anyhow::{Context, Result};
+use anyhow::*;
 use clap::Parser;
-use packet::{self, tcp::Flags, AsPacket, Builder as packet_builder, Packet as _};
-use rimnet::{
-    gateway::{self, packet::Protocol},
-    network,
-};
+use packet::{self, Builder as packet_builder, Packet as _};
+use rimnet::gateway::{self, packet::Protocol};
 use snow::{params::NoiseParams, Builder};
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::net::UdpSocket;
@@ -74,7 +71,7 @@ async fn send_sample_messages(
 
     // Start handshake
     let handshake_packet = gateway::packet::HandshakePacketBuilder::new()?
-        .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
+        .private_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
         .public_key(local_keypair.public)?
         .build()?;
     println!("handshake packet: {:?}", handshake_packet);

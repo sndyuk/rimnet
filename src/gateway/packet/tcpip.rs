@@ -12,6 +12,15 @@ pub struct TcpIp<B> {
 impl<B: AsRef<[u8]>> fmt::Debug for TcpIp<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("rimnet::packet::TcpIp")
+            .field("source_ipv4", &self.source_ipv4())
+            .field(
+                "capability",
+                &self
+                    .capability()
+                    .iter()
+                    .map(|n| format!("{:02X}", n))
+                    .collect::<String>(),
+            )
             .field(
                 "payload",
                 &self
@@ -48,6 +57,14 @@ impl<B: AsRef<[u8]>> TcpIp<B> {
         )
     }
 
+    pub fn capability(&self) -> &[u8] {
+        let header_len = self.header_len() as usize;
+        unsafe {
+            let ptr = self.buffer.as_ref().as_ptr().add(HEADER_FIX_LEN);
+            std::slice::from_raw_parts(ptr, header_len - HEADER_FIX_LEN)
+        }
+    }
+
     pub fn payload(&self) -> &[u8] {
         let header_len = self.header_len() as usize;
         let len = self.total_len as usize - header_len;
@@ -76,12 +93,12 @@ impl TcpIpPacketBuilder {
 
     pub fn build(self) -> Result<TcpIp<Vec<u8>>> {
         let source_ipv4 = self.source_ipv4.ok_or(anyhow!("source_ipv4 is rquired"))?;
-        let header_len =
-            self.capability.as_ref().map(|v| v.len()).unwrap_or(0) as u8 + HEADER_FIX_LEN as u8;
+        let header_len = self.capability.as_ref().map(|v| v.len()).unwrap_or(0) + HEADER_FIX_LEN;
+        assert!(header_len <= 127);
         Ok(TcpIp::unchecked(
             header_len as u16 + self.payload_buffer.len() as u16,
             [
-                &[header_len] as &[u8],
+                &[header_len as u8] as &[u8],
                 &source_ipv4.octets(),
                 self.capability
                     .as_ref()
