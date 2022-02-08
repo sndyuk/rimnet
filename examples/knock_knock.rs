@@ -71,6 +71,6 @@ async fn knock(
 
     println!("packet: {:?}", packet);
 
-    gateway::send(&mut sock, packet.as_ref(), &server_addr).await?;
+    gateway::send(&mut sock, &packet, &server_addr).await?;
     Ok(())
 }

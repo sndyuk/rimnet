@@ -4,7 +4,6 @@ use std::net::{IpAddr, Ipv4Addr};
 use crate::gateway;
 use crate::network::device::NetworkDevice;
 use futures::StreamExt;
-use packet::{self, Packet};
 use snow::Builder as HandshakeBuilder;
 use std::sync::Arc;
 use std::{collections::HashMap, net::SocketAddr};
@@ -161,7 +160,7 @@ async fn listen_inbound_incomming(
                                     .add_payload(&buf[..handshake_len])?
                                     .build()?;
                                 log::debug!("packet: {:?}", packet);
-                                gateway::send(main_sock, packet.as_ref(), &server_addr).await?;
+                                gateway::send(main_sock, &packet, &server_addr).await?;
 
                                 network.lock().await.put(
                                     &knock_packet.private_ipv4(),
@@ -254,7 +253,7 @@ async fn receive_handshake(
     private_key: &Vec<u8>,
     peers: &mut HashMap<IpAddr, Peer>,
     peer_remote_addr: SocketAddr,
-    packet: &mut gateway::packet::Packet<Vec<u8>>,
+    packet: &mut gateway::packet::Packet<impl AsRef<[u8]>>,
 ) -> Result<()> {
     let mut hs = HandshakeBuilder::new(NOISE_PARAMS.clone())
         .local_private_key(&private_key)
@@ -369,7 +368,7 @@ async fn listen_inbound_outgoing(
                             .add_payload(&buf[..handshake_len])?
                             .build()?;
 
-                        match gateway::send(main_sock, packet.as_ref(), &peer_remote_addr).await {
+                        match gateway::send(main_sock, &packet, &peer_remote_addr).await {
                             Ok(_) => {
                                 log::debug!("[Inbound / outgoing] Handshake scceeded and sending the packet");
                                 let tcpip_packet = gateway::packet::TcpIpPacketBuilder::new()?
@@ -385,9 +384,7 @@ async fn listen_inbound_outgoing(
                                     .add_payload(&buf[..tcpip_len])?
                                     .build()?;
 
-                                match gateway::send(main_sock, packet.as_ref(), &peer_remote_addr)
-                                    .await
-                                {
+                                match gateway::send(main_sock, &packet, &peer_remote_addr).await {
                                     Ok(_) => {
                                         log::debug!(
                                                     "[Inbound / outgoing] Session established: peer_private={}, peer_remote={}",
@@ -428,7 +425,7 @@ async fn listen_inbound_outgoing(
                             .add_payload(&buf[..tcpip_len])?
                             .build()?;
 
-                        match gateway::send(main_sock, packet.as_ref(), &peer.remote_addr).await {
+                        match gateway::send(main_sock, &packet, &peer.remote_addr).await {
                             Ok(_) => {
                                 log::debug!(
                                         "[Inbound / outgoing] Sent packet. peer_private={}, peer_public={}",

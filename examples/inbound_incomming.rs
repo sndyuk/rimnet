@@ -86,7 +86,7 @@ async fn send_sample_messages(
 
     println!("packet: {:?}", packet);
 
-    gateway::send(&mut sock, packet.as_ref(), &server_addr).await?;
+    gateway::send(&mut sock, &packet, &server_addr).await?;
 
     let mut noise = noise.into_transport_mode()?;
     println!("session established");
@@ -143,7 +143,7 @@ async fn send_sample_messages(
             .build()?;
         println!("packet: {:?}", packet);
 
-        gateway::send(&mut sock, packet.as_ref(), &server_addr).await?;
+        gateway::send(&mut sock, &packet, &server_addr).await?;
     }
     Ok(())
 }

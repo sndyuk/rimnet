@@ -94,42 +94,17 @@ impl<B: AsRef<[u8]>> Packet<B> {
 
     // --- Utils
 
-    /// Is valid
     pub fn is_valid(&self) -> bool {
         self.protocol() != Protocol::Unknown
     }
-}
 
-impl<B: AsRef<[u8]> + AsMut<[u8]>> Packet<B> {
-    pub fn set_version(&mut self, value: u8) -> Result<&mut Self> {
-        assert!(value <= 6);
-        self.buffer.as_mut()[0] = value << 5 | self.protocol_raw();
-
-        Ok(self)
-    }
-
-    pub fn set_protocol(&mut self, value: Protocol) -> Result<&mut Self> {
-        self.buffer.as_mut()[0] = self.version() | (value as u8 & 0b00011111);
-
-        Ok(self)
-    }
-
-    pub fn set_total_len(&mut self, value: u16) -> Result<&mut Self> {
-        self.buffer.as_mut()[1] = (value >> 8) as u8;
-        self.buffer.as_mut()[2] = (value & 0b11111111) as u8;
-
-        Ok(self)
-    }
-
-    // --- Utils
-
-    pub fn to_knock(&mut self) -> Result<Knock<&[u8]>> {
+    pub fn to_knock(&mut self) -> Result<Knock<impl AsRef<[u8]>>> {
         assert!(self.protocol() == Protocol::Knock);
-        let knock = Knock::unchecked(self.payload());
+        let knock = Knock::unchecked(self.payload().to_vec());
         Ok(knock)
     }
 
-    pub fn to_handshake(&mut self, hs: &mut HandshakeState) -> Result<Handshake<Vec<u8>>> {
+    pub fn to_handshake(&mut self, hs: &mut HandshakeState) -> Result<Handshake<impl AsRef<[u8]>>> {
         assert!(self.protocol() == Protocol::Handshake);
         let mut buf = [0u8; 127];
         let new_len = hs.read_message(self.payload(), &mut buf)?;
@@ -138,7 +113,7 @@ impl<B: AsRef<[u8]> + AsMut<[u8]>> Packet<B> {
         Ok(handshake)
     }
 
-    pub fn to_tcpip(&mut self, ts: &mut TransportState) -> Result<TcpIp<Vec<u8>>> {
+    pub fn to_tcpip(&mut self, ts: &mut TransportState) -> Result<TcpIp<impl AsRef<[u8]>>> {
         assert!(self.protocol() == Protocol::TcpIp);
         let mut buf = [0u8; 65535];
         let new_len = ts.read_message(self.payload(), &mut buf)?;
