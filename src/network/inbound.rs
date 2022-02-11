@@ -204,7 +204,7 @@ async fn listen_inbound_incomming(
                             Some(peer) => {
                                 // Afer the handshake
                                 log::debug!("[Inbound / incomming] Decrypting the payload");
-                                match packet.to_tcpip(peer.ts.as_mut()) {
+                                match packet.to_tcpip() {
                                     Ok(tcpip_packet) => {
                                         log::debug!(
                                             "[Inbound / incomming] Message decrypted: {:?}",
@@ -377,13 +377,12 @@ async fn listen_inbound_outgoing(
                                     .source_ipv4(private_ipv4.clone())?
                                     .add_payload(payload_packet.as_ref())?
                                     .build()?;
+
                                 let mut ts = hs.into_transport_mode()?;
-                                let tcpip_len =
-                                    ts.write_message(tcpip_packet.as_ref(), &mut buf)?;
 
                                 let packet = gateway::packet::PacketBuilder::new()?
                                     .protocol(gateway::packet::Protocol::TcpIp)?
-                                    .add_payload(&buf[..tcpip_len])?
+                                    .add_payload(tcpip_packet.as_ref())?
                                     .build()?;
 
                                 match gateway::send(main_sock, &packet, &peer_remote_addr).await {
@@ -413,18 +412,14 @@ async fn listen_inbound_outgoing(
                     // Received packet to a registered peer
                     Some(peer) => {
                         log::debug!("[Inbound / outgoing] Sending the packet");
-                        let buf = &mut [0u8; 65535]; // TODO Recycle the huge buffer
                         let tcpip_packet = gateway::packet::TcpIpPacketBuilder::new()?
                             .source_ipv4(private_ipv4.clone())?
                             .add_payload(payload_packet.as_ref())?
                             .build()?;
 
-                        let tcpip_len =
-                            peer.ts.as_mut().write_message(tcpip_packet.as_ref(), buf)?;
-
                         let packet = gateway::packet::PacketBuilder::new()?
                             .protocol(gateway::packet::Protocol::TcpIp)?
-                            .add_payload(&buf[..tcpip_len])?
+                            .add_payload(tcpip_packet.as_ref())?
                             .build()?;
 
                         match gateway::send(main_sock, &packet, &peer.remote_addr).await {

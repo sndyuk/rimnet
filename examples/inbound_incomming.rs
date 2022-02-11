@@ -134,12 +134,12 @@ async fn send_sample_messages(
             .build()?;
         println!("tcpip packet: {:?}", tcpip_packet);
 
-        let tcpip_len = noise.write_message(tcpip_packet.as_ref(), &mut buf)?;
-        println!("encrypted tcpip packet length: {:?}", tcpip_len);
+        // let tcpip_len = noise.write_message(tcpip_packet.as_ref(), &mut buf)?;
+        // println!("encrypted tcpip packet length: {:?}", tcpip_len);
 
         let packet = gateway::packet::PacketBuilder::new()?
             .protocol(Protocol::TcpIp)?
-            .add_payload(&buf[..tcpip_len])?
+            .add_payload(tcpip_packet.as_ref())?
             .build()?;
         println!("packet: {:?}", packet);
 

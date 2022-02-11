@@ -1,5 +1,5 @@
 use anyhow::Result;
-use snow::{HandshakeState, TransportState};
+use snow::HandshakeState;
 use std::fmt;
 
 pub mod knock;
@@ -114,11 +114,10 @@ impl<B: AsRef<[u8]>> Packet<B> {
         Ok(handshake)
     }
 
-    pub fn to_tcpip(&mut self, ts: &mut TransportState) -> Result<TcpIp<impl AsRef<[u8]>>> {
+    pub fn to_tcpip(&mut self) -> Result<TcpIp<impl AsRef<[u8]>>> {
         assert!(self.protocol() == Protocol::TcpIp);
-        let mut buf = [0u8; 65535];
-        let new_len = ts.read_message(self.payload().as_ref(), &mut buf)?;
-        let tcpip = TcpIp::unchecked(new_len as u16, buf[..new_len].to_vec());
+        let payload = self.payload();
+        let tcpip = TcpIp::unchecked(payload.as_ref().len() as u16, payload);
         Ok(tcpip)
     }
 }
