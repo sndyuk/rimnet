@@ -17,6 +17,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for TcpIp<B> {
                 "capability",
                 &self
                     .capability()
+                    .as_ref()
                     .iter()
                     .map(|n| format!("{:02X}", n))
                     .collect::<String>(),
@@ -25,6 +26,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for TcpIp<B> {
                 "payload",
                 &self
                     .payload()
+                    .as_ref()
                     .iter()
                     .map(|n| format!("{:02X}", n))
                     .collect::<String>(),
@@ -57,7 +59,7 @@ impl<B: AsRef<[u8]>> TcpIp<B> {
         )
     }
 
-    pub fn capability(&self) -> &[u8] {
+    pub fn capability(&self) -> impl AsRef<[u8]> {
         let header_len = self.header_len() as usize;
         unsafe {
             let ptr = self.buffer.as_ref().as_ptr().add(HEADER_FIX_LEN);
@@ -65,7 +67,7 @@ impl<B: AsRef<[u8]>> TcpIp<B> {
         }
     }
 
-    pub fn payload(&self) -> &[u8] {
+    pub fn payload(&self) -> impl AsRef<[u8]> {
         let header_len = self.header_len() as usize;
         let len = self.total_len as usize - header_len;
         unsafe {

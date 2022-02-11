@@ -24,12 +24,17 @@ impl Network {
     pub fn get(&self, private_addr: &Ipv4Addr) -> Option<&Node> {
         self.db.get(private_addr)
     }
-    pub fn put(&mut self, private_addr: &Ipv4Addr, public_addr: IpAddr, public_key: Vec<u8>) {
+    pub fn put(
+        &mut self,
+        private_addr: &Ipv4Addr,
+        public_addr: IpAddr,
+        public_key: impl AsRef<[u8]>,
+    ) {
         self.db.insert(
             private_addr.clone(),
             Node {
                 public_addr,
-                public_key,
+                public_key: public_key.as_ref().to_vec(),
             },
         );
     }

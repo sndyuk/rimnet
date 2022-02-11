@@ -56,7 +56,7 @@ impl<B: AsRef<[u8]>> Knock<B> {
         ((self.buffer.as_ref()[9] as u16) << 8) | (self.buffer.as_ref()[10] as u16)
     }
 
-    pub fn public_key(&self) -> &[u8] {
+    pub fn public_key(&self) -> impl AsRef<[u8]> {
         let header_len = self.header_len() as usize;
         let len = header_len - HEADER_FIX_LEN;
         unsafe {

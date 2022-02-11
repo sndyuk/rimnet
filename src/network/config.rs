@@ -25,7 +25,7 @@ impl NetworkConfigBuilder {
     pub fn new() -> Result<NetworkConfigBuilder> {
         Ok(NetworkConfigBuilder {
             name: None,
-            mtu: 1500,
+            mtu: 1380,
             private_ipv4: None,
             public_ipv4: None,
             public_port: 7891,

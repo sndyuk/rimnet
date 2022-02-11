@@ -51,6 +51,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for Packet<B> {
                 "payload",
                 &self
                     .payload()
+                    .as_ref()
                     .iter()
                     .map(|n| format!("{:02X}", n))
                     .collect::<String>(),
@@ -85,7 +86,7 @@ impl<B: AsRef<[u8]>> Packet<B> {
         ((self.buffer.as_ref()[1] as u16) << 8) | (self.buffer.as_ref()[2] as u16)
     }
 
-    pub fn payload(&self) -> &[u8] {
+    pub fn payload(&self) -> impl AsRef<[u8]> {
         unsafe {
             let ptr = self.buffer.as_ref().as_ptr().add(HEADER_FIX_LEN);
             std::slice::from_raw_parts(ptr, self.total_len() as usize - HEADER_FIX_LEN)
@@ -100,14 +101,14 @@ impl<B: AsRef<[u8]>> Packet<B> {
 
     pub fn to_knock(&mut self) -> Result<Knock<impl AsRef<[u8]>>> {
         assert!(self.protocol() == Protocol::Knock);
-        let knock = Knock::unchecked(self.payload().to_vec());
+        let knock = Knock::unchecked(self.payload());
         Ok(knock)
     }
 
     pub fn to_handshake(&mut self, hs: &mut HandshakeState) -> Result<Handshake<impl AsRef<[u8]>>> {
         assert!(self.protocol() == Protocol::Handshake);
         let mut buf = [0u8; 127];
-        let new_len = hs.read_message(self.payload(), &mut buf)?;
+        let new_len = hs.read_message(self.payload().as_ref(), &mut buf)?;
         assert!(new_len <= 127);
         let handshake = Handshake::unchecked(buf[..new_len].to_vec());
         Ok(handshake)
@@ -116,7 +117,7 @@ impl<B: AsRef<[u8]>> Packet<B> {
     pub fn to_tcpip(&mut self, ts: &mut TransportState) -> Result<TcpIp<impl AsRef<[u8]>>> {
         assert!(self.protocol() == Protocol::TcpIp);
         let mut buf = [0u8; 65535];
-        let new_len = ts.read_message(self.payload(), &mut buf)?;
+        let new_len = ts.read_message(self.payload().as_ref(), &mut buf)?;
         let tcpip = TcpIp::unchecked(new_len as u16, buf[..new_len].to_vec());
         Ok(tcpip)
     }

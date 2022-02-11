@@ -141,13 +141,13 @@ async fn listen_inbound_incomming(
                                 let handshake_packet =
                                     gateway::packet::HandshakePacketBuilder::new()?
                                         .private_ipv4(private_ipv4.clone())?
-                                        .public_key(public_key.to_vec())?
+                                        .public_key(public_key)?
                                         .build()?;
 
                                 log::debug!("handshake packet: {:?}", handshake_packet);
                                 let mut noise = HandshakeBuilder::new(NOISE_PARAMS.clone())
                                     .local_private_key(&private_key)
-                                    .remote_public_key(&knock_packet.public_key())
+                                    .remote_public_key(&knock_packet.public_key().as_ref())
                                     .build_initiator()?;
 
                                 let mut buf = [0u8; 127];
@@ -165,7 +165,7 @@ async fn listen_inbound_incomming(
                                 network.lock().await.put(
                                     &knock_packet.private_ipv4(),
                                     peer_remote_addr.ip(),
-                                    knock_packet.public_key().to_vec(),
+                                    knock_packet.public_key(),
                                 );
                                 log::debug!(
                                     "[Inbound / incomming] Knock accepted: peer_private={}, peer_remote={}",
@@ -210,7 +210,9 @@ async fn listen_inbound_incomming(
                                             "[Inbound / incomming] Message decrypted: {:?}",
                                             tcpip_packet
                                         );
-                                        tun_writer.write_all(tcpip_packet.payload()).await?;
+                                        tun_writer
+                                            .write_all(tcpip_packet.payload().as_ref())
+                                            .await?;
                                     }
                                     Err(e) => {
                                         log::warn!(

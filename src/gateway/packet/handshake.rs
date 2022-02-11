@@ -96,8 +96,8 @@ impl HandshakePacketBuilder {
         Ok(self)
     }
 
-    pub fn public_key(mut self, value: Vec<u8>) -> Result<Self> {
-        self.public_key = Some(value);
+    pub fn public_key(mut self, value: impl AsRef<[u8]>) -> Result<Self> {
+        self.public_key = Some(value.as_ref().to_vec());
 
         Ok(self)
     }
