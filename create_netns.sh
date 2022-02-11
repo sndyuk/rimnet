@@ -49,5 +49,5 @@ then
     exit
 fi
 
-firewall-cmd --permanent --add-port=7891/udp
-firewall-cmd --reload
+firewall-cmd --add-port=7891/udp
+
