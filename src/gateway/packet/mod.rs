@@ -16,11 +16,11 @@ const HEADER_FIX_LEN: usize = 3;
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Protocol {
-    // ↓ Not encrypted
+    // ↓ Not signed
     Knock = 0b0_0001,
-    // ↓ Encrypted
+    // ↓ Signed
     Handshake = 0b1_0001,
-    TcpIp = 0b1_0010,
+    TcpIp = 0b1_0010, // TODO: Not signed yet
 
     Unknown = 0b0_0000,
 }
