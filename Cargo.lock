@@ -53,6 +53,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap 3.0.0-beta.5",
+ "env_logger",
+ "lib",
+ "packet",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,6 +283,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap 3.0.0-beta.5",
+ "env_logger",
+ "lib",
+ "packet",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -681,6 +711,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
+name = "lib"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "byteorder",
+ "bytes",
+ "chacha20poly1305",
+ "clap 3.0.0-beta.5",
+ "criterion",
+ "env_logger",
+ "futures",
+ "hex",
+ "lazy_static",
+ "log",
+ "packet",
+ "ring",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "snow",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "tun",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1076,36 +1136,6 @@ name = "regex-syntax"
 version = "0.6.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
-
-[[package]]
-name = "rimnet"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "byteorder",
- "bytes",
- "chacha20poly1305",
- "clap 3.0.0-beta.5",
- "criterion",
- "env_logger",
- "futures",
- "hex",
- "lazy_static",
- "log",
- "packet",
- "ring",
- "serde",
- "serde_derive",
- "serde_json",
- "snow",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "tun",
-]
 
 [[package]]
 name = "ring"

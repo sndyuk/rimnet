@@ -1,9 +1,6 @@
-extern crate base64;
-extern crate tun;
-
 use anyhow::*;
 use clap::Parser;
-use rimnet::gateway::{self, packet::Protocol};
+use lib::gateway::{self, packet::Protocol};
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::net::UdpSocket;
 

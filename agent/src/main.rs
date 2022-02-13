@@ -7,7 +7,7 @@ use clap::Parser;
 use tracing as log;
 use tracing_subscriber;
 
-use rimnet::*;
+use lib::*;
 
 #[derive(Parser)]
 #[clap()]
