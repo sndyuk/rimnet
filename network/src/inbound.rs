@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::net::{IpAddr, Ipv4Addr};
 
-use crate::gateway;
-use crate::network::device::NetworkDevice;
+use crate::device::NetworkDevice;
 use futures::StreamExt;
+use lib::gateway;
 use snow::Builder as HandshakeBuilder;
 use std::sync::Arc;
 use std::{collections::HashMap, net::SocketAddr};

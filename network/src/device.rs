@@ -2,6 +2,7 @@ use anyhow::*;
 use std::net::Ipv4Addr;
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio_util::codec::FramedRead;
+use tracing as log;
 use tun::{AsyncDevice, TunPacketCodec};
 
 pub struct NetworkDevice<R> {

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "lib",
+    "network",
     "agent",
     "cli",
 ]
