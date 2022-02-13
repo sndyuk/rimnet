@@ -6,7 +6,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 #### Features
 - [x] Connect the peer agents using Noise protocol.
 - CLI
-  - [ ] TBD
+  - [x] `knock` command: to request handshake.
 - Web GUI
   - [ ] TBD
 - Reconnect the peer agent if the target agent lost the state:
@@ -90,7 +90,7 @@ The node is going to run on the new sandbox network `rimnet_2`.
 2. Knock to the peer node from the new node.
 
     ```sh
-    $ cargo build -p agent && sudo ip netns exec rimnet_1 target/debug/cli --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2 --public-key <KEY_1>
+    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2 --public-key <KEY_1>
     ```
 
 3. Send ping packet.

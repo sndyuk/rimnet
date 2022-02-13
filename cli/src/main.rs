@@ -4,9 +4,20 @@ use lib::gateway::{self, packet::Protocol};
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::net::UdpSocket;
 
-#[derive(Parser)]
-#[clap()]
+#[derive(Parser, Debug)]
 struct Opts {
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Parser, Debug)]
+enum Command {
+    #[clap(version = "1.0")]
+    Knock(KnockOpts),
+}
+
+#[derive(Parser, Debug)]
+struct KnockOpts {
     #[clap(short, long)]
     public_key: String,
     #[clap(long)]
@@ -24,15 +35,20 @@ struct Opts {
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
-    knock(
-        &opts.private_ipv4,
-        &opts.public_ipv4,
-        opts.public_port,
-        base64::decode(opts.public_key)?,
-        &opts.target_public_ipv4,
-        opts.target_public_port,
-    )
-    .await?;
+    match opts.command {
+        Command::Knock(args) => {
+            knock(
+                &args.private_ipv4,
+                &args.public_ipv4,
+                args.public_port,
+                base64::decode(args.public_key)?,
+                &args.target_public_ipv4,
+                args.target_public_port,
+            )
+            .await?;
+        }
+    }
+
     println!("all done.");
     Ok(())
 }

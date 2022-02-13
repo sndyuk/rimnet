@@ -10,7 +10,6 @@ use tracing_subscriber;
 use lib::*;
 
 #[derive(Parser)]
-#[clap()]
 struct Opts {
     #[clap(short = 'n', long)]
     tun_device_name: Option<String>,
