@@ -85,5 +85,7 @@ async fn knock(
     println!("packet: {:?}", packet);
 
     gateway::send(&mut sock, &packet, &server_addr).await?;
+
+    // TODO: Verify the peer accepted the request.
     Ok(())
 }

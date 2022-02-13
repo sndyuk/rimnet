@@ -150,7 +150,10 @@ async fn listen_inbound_incomming(
                                         .public_key(public_key)?
                                         .build()?;
 
-                                log::debug!("handshake packet: {:?}", handshake_packet);
+                                log::trace!(
+                                    "[Inbound / incomming] handshake packet: {:?}",
+                                    handshake_packet
+                                );
                                 let mut noise = HandshakeBuilder::new(NOISE_PARAMS.clone())
                                     .local_private_key(&private_key)
                                     .remote_public_key(&knock_packet.public_key().as_ref())
@@ -165,7 +168,6 @@ async fn listen_inbound_incomming(
                                     .protocol(gateway::packet::Protocol::Handshake)?
                                     .add_payload(&buf[..handshake_len])?
                                     .build()?;
-                                log::trace!("packet: {:?}", packet);
                                 gateway::send(main_sock, &packet, &server_addr).await?;
 
                                 network.lock().await.put(
@@ -173,7 +175,7 @@ async fn listen_inbound_incomming(
                                     peer_remote_addr.ip(),
                                     knock_packet.public_key(),
                                 );
-                                log::debug!(
+                                log::info!(
                                     "[Inbound / incomming] Knock accepted: peer_private={}, peer_remote={}",
                                     knock_packet.private_ipv4(),
                                     peer_remote_addr
@@ -299,7 +301,7 @@ async fn receive_handshake(
                 peer_remote_addr.ip(),
                 handshake_packet.public_key().to_vec(),
             );
-            log::debug!(
+            log::info!(
                 "[Inbound / incomming] Session established: peer_private={}, peer_remote={}",
                 handshake_packet.private_ipv4(),
                 peer_remote_addr
@@ -337,14 +339,14 @@ async fn listen_inbound_outgoing(
                 let payload_packet = match raw_packet_bytes[0] >> 4 {
                     4 => packet::ip::v4::Packet::unchecked(raw_packet_bytes),
                     6 => {
-                        log::warn!(
+                        log::debug!(
                             "[Inbound / outgoing] Drop the packet. protocol=IPv6, data={:?}",
                             raw_packet_bytes
                         );
                         continue;
                     }
                     _ => {
-                        log::warn!(
+                        log::debug!(
                             "[Inbound / outgoing] Drop the packet. protocol=unknown, data={:?}",
                             raw_packet_bytes
                         );
@@ -438,8 +440,6 @@ async fn listen_inbound_outgoing(
                                     .add_payload(payload_packet.as_ref())?
                                     .build()?;
 
-                                let mut ts = hs.into_transport_mode()?;
-
                                 let packet = gateway::packet::PacketBuilder::new()?
                                     .protocol(gateway::packet::Protocol::TcpIp)?
                                     .add_payload(tcpip_packet.as_ref())?
@@ -454,7 +454,7 @@ async fn listen_inbound_outgoing(
                                         peers_cache.insert(
                                             peer_private_addr,
                                             Peer {
-                                                ts: Box::new(ts),
+                                                ts: Box::new(hs.into_transport_mode()?),
                                                 remote_addr: Box::new(peer_remote_addr),
                                             },
                                         );

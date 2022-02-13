@@ -34,7 +34,7 @@ impl NetworkConfigBuilder {
         })
     }
 
-    pub fn build(mut self) -> Result<NetworkConfig> {
+    pub fn build(self) -> Result<NetworkConfig> {
         Ok(NetworkConfig {
             name: self.name.unwrap_or(String::from("rimnet")),
             mtu: self.mtu,
