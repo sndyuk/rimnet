@@ -5,7 +5,6 @@ use tokio_util::codec::FramedRead;
 use tun::{AsyncDevice, TunPacketCodec};
 
 pub struct NetworkDevice<R> {
-    mtu: i32,
     pub reader: R,
     pub writer: WriteHalf<AsyncDevice>,
 }
@@ -42,11 +41,7 @@ impl NetworkDevice<ReadHalf<AsyncDevice>> {
         mtu: i32,
     ) -> Result<NetworkDevice<ReadHalf<AsyncDevice>>> {
         let (reader, writer) = create(name, private_ipv4, mtu)?;
-        Ok(NetworkDevice {
-            mtu,
-            reader,
-            writer,
-        })
+        Ok(NetworkDevice { reader, writer })
     }
 }
 
@@ -60,7 +55,6 @@ impl NetworkDevice<FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>> {
         let codec = TunPacketCodec::new(false, mtu);
         let framed_reader = FramedRead::new(reader, codec);
         Ok(NetworkDevice {
-            mtu,
             reader: framed_reader,
             writer,
         })
