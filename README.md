@@ -31,16 +31,15 @@ $ ./clean_netns.sh
 
 #### Run the sample agent on the sandbox namespace
 ```sh
-$ cargo build --examples
-$ sudo ip netns exec rimnet_1 sudo RUST_BACKTRACE=full target/debug/examples/agent -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1
+$ cargo build -p agent && sudo ip netns exec rimnet_1 sudo RUST_BACKTRACE=full target/debug/agent -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1
 public key: <KEY_1>
 listening on 10.0.254.1:7891
 ```
 
 [Option] To run without `sudo`, apply the net_admin capability to the binary.
 ```
-$ sudo setcap cap_net_admin+epi target/debug/examples/agent
-$ sudo ip netns exec rimnet_1 target/debug/examples/agent -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1
+$ sudo setcap cap_net_admin+epi target/debug/agent
+$ sudo ip netns exec rimnet_1 target/debug/agent -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1
 ```
 
 ### Trace packets
@@ -85,13 +84,13 @@ $ cargo run --example inbound_incomming -- --key <KEY_1> --host-ipv4 10.0.254.25
 The node is going to run on the new sandbox network `rimnet_2`.
 
     ```sh
-    $ cargo build --examples && sudo ip netns exec rimnet_2 sudo RUST_BACKTRACE=full target/debug/examples/agent -v -n test-dev --private-ipv4 10.0.0.4 --public-ipv4 10.0.254.2
+    $ cargo build -p agent && sudo ip netns exec rimnet_2 sudo RUST_BACKTRACE=full target/debug/agent -v -n test-dev --private-ipv4 10.0.0.4 --public-ipv4 10.0.254.2
     ```
 
 2. Knock to the peer node from the new node.
 
     ```sh
-    $ cargo build --examples && sudo ip netns exec rimnet_1 target/debug/examples/knock_knock --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2 --public-key <KEY_1>
+    $ cargo build -p agent && sudo ip netns exec rimnet_1 target/debug/cli --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2 --public-key <KEY_1>
     ```
 
 3. Send ping packet.
