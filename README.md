@@ -3,9 +3,19 @@
 Secure container anywahere.
 The Secure peer-to-peer overlay TCP/IP network.
 
-- Noise protocol / Asymmetric Encryption
-- Ethereum
-- eBPF
+#### Features
+- [x] Connect the peer agents using Noise protocol.
+- CLI
+  - [ ] TBD
+- Web GUI
+  - [ ] TBD
+- Reconnect the peer agent if the target agent lost the state:
+    - [x] When the agent has cleaned the state cache.
+    - [ ] When the target agent has changed the public address.
+- [x] Try to connect to a unknown peer via connected peer agents.
+- [ ] Multi Factor Authentication(Handshake) using OIDC CIBA.
+- [ ] Sign using a master key to secure the network.
+- [ ] Extract public I/F for using external datastores to store agents and private networks information.
 
 ## Usage
 
@@ -95,7 +105,3 @@ The node is going to run on the new sandbox network `rimnet_2`.
     1 packets transmitted, 1 received, 0% packet loss, time 0ms
     rtt min/avg/max/mdev = 2.170/2.170/2.170/0.000 ms
     ```
-
-#### TODO
-- [ ] Extract public I/F for using external datastores to store agents and private networks information
-- [ ] TBD
