@@ -57,6 +57,8 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
                 &private_key,
                 &public_key,
                 &config.private_ipv4,
+                &config.public_ipv4,
+                config.public_port,
             )
             .await
             {
@@ -116,6 +118,8 @@ async fn listen_inbound_incomming(
     private_key: &Vec<u8>,
     public_key: &Vec<u8>,
     private_ipv4: &Ipv4Addr,
+    public_ipv4: &Ipv4Addr,
+    public_port: u16,
 ) -> Result<()> {
     // Key: public IPv4 of the peer
     let mut peers_cache: HashMap<IpAddr, Peer> = HashMap::new();
@@ -200,34 +204,49 @@ async fn listen_inbound_incomming(
                         };
                     }
                     gateway::packet::Protocol::TcpIp => {
-                        match peers_cache.get_mut(&peer_remote_addr.ip()) {
-                            Some(peer) => {
-                                // Afer the handshake
-                                log::debug!("[Inbound / incomming] Decrypting the payload");
-                                match packet.to_tcpip() {
-                                    Ok(tcpip_packet) => {
+                        match packet.to_tcpip() {
+                            Ok(tcpip_packet) => {
+                                match peers_cache.get_mut(&peer_remote_addr.ip()) {
+                                    Some(_) => {
+                                        // Afer the handshake
                                         log::debug!(
-                                            "[Inbound / incomming] Message decrypted: {:?}",
+                                            "[Inbound / incomming] Message extracted: {:?}",
                                             tcpip_packet
                                         );
                                         tun_writer
                                             .write_all(tcpip_packet.payload().as_ref())
                                             .await?;
                                     }
-                                    Err(e) => {
-                                        log::warn!(
-                                    "[Inbound / incomming] Could not decrypt the payload. Retry handshake. peer_remote={}. reason={}",
-                                    peer_remote_addr, e);
-                                        log::warn!(
-                                            "[Inbound / incomming] Ignore the handshake error"
+                                    None => {
+                                        log::info!(
+                                            "[Inbound / incomming] Peer not found. Try knock."
                                         );
+                                        let knock_packet =
+                                            gateway::packet::KnockPacketBuilder::new()?
+                                                .private_ipv4(tcpip_packet.source_ipv4())?
+                                                .public_ipv4(public_ipv4.clone())?
+                                                .public_port(public_port)?
+                                                .public_key(&public_key)?
+                                                .build()?;
+                                        log::debug!(
+                                            "[Inbound / incomming] knock packet: {:?}",
+                                            knock_packet
+                                        );
+
+                                        let packet = gateway::packet::PacketBuilder::new()?
+                                            .protocol(gateway::packet::Protocol::Knock)?
+                                            .add_payload(knock_packet.as_ref())?
+                                            .build()?;
+
+                                        gateway::send(&main_sock, &packet, &peer_remote_addr)
+                                            .await?;
                                     }
                                 }
                             }
-                            None => {
-                                log::info!(
-                                    "[Inbound / incomming] Peer not found. Require handshake first."
-                                );
+                            Err(e) => {
+                                log::warn!(
+                            "[Inbound / incomming] Could not extract the payload. Retry handshake manually. peer_remote={}. reason={}",
+                            peer_remote_addr, e);
                             }
                         }
                     }
