@@ -71,19 +71,19 @@ impl<B: AsRef<[u8]>> Packet<B> {
         Packet { buffer }
     }
 
+    pub fn total_len(&self) -> u16 {
+        ((self.buffer.as_ref()[0] as u16) << 8) | (self.buffer.as_ref()[1] as u16)
+    }
+
     pub fn version(&self) -> u8 {
-        (self.buffer.as_ref()[0] >> 5) & 0b00011111
+        (self.buffer.as_ref()[2] >> 5) & 0b00011111
     }
 
     pub fn protocol(&self) -> Protocol {
         Protocol::from(self.protocol_raw())
     }
     fn protocol_raw(&self) -> u8 {
-        self.buffer.as_ref()[0] & 0b00011111
-    }
-
-    pub fn total_len(&self) -> u16 {
-        ((self.buffer.as_ref()[1] as u16) << 8) | (self.buffer.as_ref()[2] as u16)
+        self.buffer.as_ref()[2] & 0b00011111
     }
 
     pub fn payload(&self) -> impl AsRef<[u8]> {
@@ -142,9 +142,9 @@ impl PacketBuilder {
         let total_len = HEADER_FIX_LEN as u16 + self.payload_buffer.len() as u16;
         let buf = [
             &[
-                self.version << 5 | self.protocol as u8,
                 (total_len >> 8) as u8,
-                (total_len & 0b11111111) as u8,
+                (total_len & 0xff) as u8,
+                self.version << 5 | self.protocol as u8,
             ] as &[u8],
             self.payload_buffer.as_ref(),
         ]
