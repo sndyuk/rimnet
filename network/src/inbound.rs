@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::{collections::HashMap, net::SocketAddr};
 use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::UdpSocket;
+use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio_util::codec::FramedRead;
 use tracing as log;
@@ -44,7 +45,8 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
     let network = Arc::new(Mutex::new(Network::new()?));
 
     // Inbound incomming loop
-    let inbound_incomming_loop = tokio::spawn({
+    let (tx1, rx1) = oneshot::channel();
+    tokio::spawn({
         let tunnel_sock_addr = tunnel_sock_addr.clone();
         let private_key = config.private_key.clone();
         let public_key = config.public_key.clone();
@@ -62,21 +64,21 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
             )
             .await
             {
-                Ok(_) => true,
+                Ok(_) => tx1.send(true),
                 Err(e) => {
                     log::error!(
                         "[Inbound / incomming] Could not recover the error. reason={}",
                         e
                     );
-                    false
+                    tx1.send(false)
                 }
             }
         }
     });
-    log::debug!("[Inbound / incomming] Main loop started");
 
     // Inbound outging loop
-    let inbound_outgoing_loop = tokio::spawn({
+    let (tx2, rx2) = oneshot::channel();
+    tokio::spawn({
         let tunnel_sock_addr = tunnel_sock_addr.clone();
         let private_key = config.private_key.clone();
         let public_key = config.public_key.clone();
@@ -95,21 +97,26 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
             )
             .await
             {
-                Ok(_) => true,
+                Ok(_) => tx2.send(true),
                 Err(e) => {
                     log::error!(
                         "[Inbound / outgoing] Could not recover the error. reason={}",
                         e
                     );
-                    false
+                    tx2.send(false)
                 }
             }
         }
     });
-    log::debug!("[Inbound / outgoing] Main loop started");
 
-    inbound_incomming_loop.await?;
-    inbound_outgoing_loop.await?;
+    tokio::select!(
+        v = rx1 => {
+            log::info!("[Inbound / incomming] {:?}", v);
+        },
+        v = rx2 => {
+            log::info!("[Inbound / outgoing] {:?}", v);
+        }
+    );
     Ok(())
 }
 
