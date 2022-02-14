@@ -5,21 +5,49 @@ The Secure peer-to-peer overlay TCP/IP network.
 
 #### Features
 - [x] Connect the peer agents using Noise protocol.
-- CLI
+- [ ] NAT hole punching.
+- CLI:
   - [x] `knock` command: to request handshake.
-- Web GUI
+- Web GUI:
   - [ ] TBD
 - Reconnect the peer agent if the target agent lost the state:
     - [x] When the agent has cleaned the state cache.
     - [ ] When the target agent has changed the public address.
 - [x] Try to connect to a unknown peer via connected peer agents.
-- [ ] Multi Factor Authentication(Handshake) using OIDC CIBA.
-- [ ] Sign using a master key to secure the network.
-- [ ] Extract public I/F for using external datastores to store agents and private networks information.
+- Access control:
+  - [ ] Multi Factor Authentication(Handshake) using OIDC CIBA.
+  - [ ] Capability based access control.
+
+#### Internal features
+  - [ ] Sign using a master key to secure the network.
+  - [ ] Extract public I/F for using external datastores to store agents and private networks information.
 
 ## Usage
 
-### Run
+1. Run the agent.
+
+    ```sh
+    $ cargo build -p agent --release && sudo target/release/agent -v -n utun0 --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the machine1>
+    public key: <KEY_1>
+    listening on 10.0.254.1:7891
+    ```
+
+2. Run the peer agent on a different machine.
+
+    ```sh
+    $ cargo build -p agent --release && sudo target/release/agent -v -n test-dev --private-ipv4 10.0.0.4 --public-ipv4 <public IPv4 address of the machine2>
+    public key: <KEY_2>
+    listening on 10.0.254.1:7891
+    ```
+
+3. Knock to the peer node from the new node.
+
+    ```sh
+    $ cargo build -p cli --release && target/release/cli knock --private-ipv4 10.0.0.3 --public-ipv4 <machine1> --target-public-ipv4 <machine2> --public-key <KEY_1>
+    ```
+
+
+### Development (Linux only)
 
 #### Create the sandbox network namespace
 ```sh
