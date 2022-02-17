@@ -2,7 +2,7 @@ use anyhow::Result;
 use snow::TransportState;
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{Ipv4Addr, SocketAddr},
 };
 
 pub struct Network {
@@ -16,7 +16,7 @@ impl Network {
 }
 
 pub struct Node {
-    pub public_addr: IpAddr,
+    pub public_addr: SocketAddr,
     pub public_key: Vec<u8>,
 }
 
@@ -27,7 +27,7 @@ impl Network {
     pub fn put(
         &mut self,
         private_addr: &Ipv4Addr,
-        public_addr: IpAddr,
+        public_addr: SocketAddr,
         public_key: impl AsRef<[u8]>,
     ) {
         self.db.insert(
