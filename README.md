@@ -24,26 +24,33 @@ The Secure peer-to-peer overlay TCP/IP network.
 
 ## Usage
 
+### Machine 1
 1. Run the agent.
+1-a. Run the agent on a host machine
 
     ```sh
-    $ cargo build -p agent --release && sudo target/release/agent -v -n utun0 --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the machine1>
+    $ cargo build -p agent --release && sudo target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the machine>
     public key: <KEY_1>
     listening on 10.0.254.1:7891
     ```
 
-2. Run the peer agent on a different machine.
+1-b. Run the agent on a container
 
     ```sh
-    $ cargo build -p agent --release && sudo target/release/agent -v -n test-dev --private-ipv4 10.0.0.4 --public-ipv4 <public IPv4 address of the machine2>
+    $ cargo build -p agent --release && sudo target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the container> --external-public-ipv4 <public IPv4 address of the host machine> --external-public-port <public port of the host machine>
     public key: <KEY_2>
     listening on 10.0.254.1:7891
     ```
 
-3. Knock to the peer node from the new node.
+### Machine 2
+2. Run the peer agent on a different machine.
+
+    Same as #1 but use `--private-ipv4 10.0.0.4`.
+
+3. Knock to the peer agent from the new node.
 
     ```sh
-    $ cargo build -p cli --release && target/release/cli knock --private-ipv4 10.0.0.3 --public-ipv4 <machine1> --target-public-ipv4 <machine2> --public-key <KEY_1>
+    $ cargo build -p cli --release && target/release/cli knock --private-ipv4 10.0.0.4 --external-public-ipv4 <public IPv4 address of the host machine> --target-exteral-public-ipv4 <public IPv4 address of the target host machine> --public-key <KEY_2>
     ```
 
 
@@ -118,7 +125,7 @@ The node is going to run on the new sandbox network `rimnet_2`.
 2. Knock to the peer node from the new node.
 
     ```sh
-    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2 --public-key <KEY_1>
+    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock --private-ipv4 10.0.0.3 --external-public-ipv4 10.0.254.1 --target-external-public-ipv4 10.0.254.2 --public-key <KEY_1>
     ```
 
 3. Send ping packet.

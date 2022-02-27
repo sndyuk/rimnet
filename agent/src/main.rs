@@ -19,6 +19,10 @@ struct Opts {
     public_ipv4: Option<String>,
     #[clap(short, long)]
     public_port: Option<u16>,
+    #[clap(long)]
+    external_public_ipv4: Option<String>,
+    #[clap(short, long)]
+    external_public_port: Option<u16>,
     #[clap(short, long)]
     mtu: Option<i32>,
     #[clap(short, long)]
@@ -67,6 +71,12 @@ async fn main() -> Result<()> {
     }
     if let Some(v) = opts.public_port {
         network_config_builder = network_config_builder.public_port(v)?;
+    }
+    if let Some(v) = opts.external_public_ipv4 {
+        network_config_builder = network_config_builder.external_public_ipv4(v.parse::<Ipv4Addr>()?)?;
+    }
+    if let Some(v) = opts.external_public_port {
+        network_config_builder = network_config_builder.external_public_port(v)?;
     }
     network::run(network_config_builder.build()?).await?;
     Ok(())

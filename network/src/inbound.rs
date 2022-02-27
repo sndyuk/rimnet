@@ -61,8 +61,8 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
                 &private_key,
                 &public_key,
                 &config.private_ipv4,
-                &config.public_ipv4,
-                config.public_port,
+                &config.external_public_ipv4,
+                config.external_public_port,
             )
             .await
             {
@@ -93,8 +93,8 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
                 &private_key,
                 &public_key,
                 &config.private_ipv4,
-                &config.public_ipv4,
-                config.public_port,
+                &config.external_public_ipv4,
+                config.external_public_port,
             )
             .await
             {
@@ -128,8 +128,8 @@ async fn listen_inbound_incomming(
     private_key: &Vec<u8>,
     public_key: &Vec<u8>,
     private_ipv4: &Ipv4Addr,
-    public_ipv4: &Ipv4Addr,
-    public_port: u16,
+    external_public_ipv4: &Ipv4Addr,
+    external_public_port: u16,
 ) -> Result<()> {
     // Key: private IPv4 of the peer
     let mut peers_cache: HashMap<Ipv4Addr, Peer> = HashMap::new();
@@ -155,8 +155,8 @@ async fn listen_inbound_incomming(
                                 let handshake_packet =
                                     gateway::packet::HandshakePacketBuilder::new()?
                                         .private_ipv4(private_ipv4.clone())?
-                                        .public_ipv4(public_ipv4.clone())?
-                                        .public_port(public_port)?
+                                        .public_ipv4(external_public_ipv4.clone())?
+                                        .public_port(external_public_port)?
                                         .public_key(public_key)?
                                         .build()?;
 
@@ -239,8 +239,8 @@ async fn listen_inbound_incomming(
                                         let knock_packet =
                                             gateway::packet::KnockPacketBuilder::new()?
                                                 .private_ipv4(private_ipv4.clone())?
-                                                .public_ipv4(public_ipv4.clone())?
-                                                .public_port(public_port)?
+                                                .public_ipv4(external_public_ipv4.clone())?
+                                                .public_port(external_public_port)?
                                                 .target_private_ipv4(
                                                     tcpip_packet.source_ipv4().clone(),
                                                 )?
@@ -349,8 +349,8 @@ async fn listen_inbound_outgoing(
     private_key: &Vec<u8>,
     public_key: &Vec<u8>,
     private_ipv4: &Ipv4Addr,
-    public_ipv4: &Ipv4Addr,
-    public_port: u16,
+    external_public_ipv4: &Ipv4Addr,
+    external_public_port: u16,
 ) -> Result<()> {
     let mut peers_cache: HashMap<Ipv4Addr, Peer> = HashMap::new();
 
@@ -406,8 +406,8 @@ async fn listen_inbound_outgoing(
                                 // TODO: Query the peer's info to other peers and knock to the peer.
                                 let knock_packet = gateway::packet::KnockPacketBuilder::new()?
                                     .private_ipv4(private_ipv4.clone())?
-                                    .public_ipv4(public_ipv4.clone())?
-                                    .public_port(public_port)?
+                                    .public_ipv4(external_public_ipv4.clone())?
+                                    .public_port(external_public_port)?
                                     .target_private_ipv4(peer_private_addr)?
                                     .public_key(&public_key)?
                                     .build()?;
@@ -434,8 +434,8 @@ async fn listen_inbound_outgoing(
                         );
                         let handshake_packet = gateway::packet::HandshakePacketBuilder::new()?
                             .private_ipv4(private_ipv4.clone())?
-                            .public_ipv4(public_ipv4.clone())?
-                            .public_port(public_port)?
+                            .public_ipv4(external_public_ipv4.clone())?
+                            .public_port(external_public_port)?
                             .public_key(public_key.to_vec())?
                             .build()?;
 
