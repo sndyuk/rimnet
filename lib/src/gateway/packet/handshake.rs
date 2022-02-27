@@ -1,7 +1,7 @@
 use anyhow::*;
 use std::{fmt, net::Ipv4Addr};
 
-pub const HEADER_FIX_LEN: usize = 5;
+pub const HEADER_FIX_LEN: usize = 11;
 
 #[derive(Copy, Clone)]
 pub struct Handshake<B> {
@@ -13,6 +13,8 @@ impl<B: AsRef<[u8]>> fmt::Debug for Handshake<B> {
         f.debug_struct("rimnet::packet::Handshake")
             .field("header_len", &self.header_len())
             .field("private_ipv4", &self.private_ipv4())
+            .field("public_ipv4", &self.public_ipv4())
+            .field("public_port", &self.public_port())
             .field("public_key", &base64::encode(&self.public_key()))
             .finish()
     }
@@ -42,6 +44,19 @@ impl<B: AsRef<[u8]>> Handshake<B> {
         )
     }
 
+    pub fn public_ipv4(&self) -> Ipv4Addr {
+        Ipv4Addr::new(
+            self.buffer.as_ref()[5],
+            self.buffer.as_ref()[6],
+            self.buffer.as_ref()[7],
+            self.buffer.as_ref()[8],
+        )
+    }
+
+    pub fn public_port(&self) -> u16 {
+        ((self.buffer.as_ref()[9] as u16) << 8) | (self.buffer.as_ref()[10] as u16)
+    }
+
     pub fn public_key(&self) -> &[u8] {
         let header_len = self.header_len() as usize;
         let len = header_len - HEADER_FIX_LEN;
@@ -55,6 +70,8 @@ impl<B: AsRef<[u8]>> Handshake<B> {
 #[derive(Debug)]
 pub struct HandshakePacketBuilder {
     private_ipv4: Option<Ipv4Addr>,
+    public_ipv4: Option<Ipv4Addr>,
+    public_port: u16,
     public_key: Option<Vec<u8>>,
 }
 
@@ -62,6 +79,8 @@ impl HandshakePacketBuilder {
     pub fn new() -> Result<Self> {
         Ok(HandshakePacketBuilder {
             private_ipv4: None,
+            public_ipv4: None,
+            public_port: 0,
             public_key: None,
         })
     }
@@ -70,12 +89,18 @@ impl HandshakePacketBuilder {
         let private_ipv4 = self
             .private_ipv4
             .ok_or(anyhow!("private_ipv4 is rquired"))?;
+        let public_ipv4 = self.public_ipv4.ok_or(anyhow!("public_ipv4 is rquired"))?;
         let public_key = self.public_key.ok_or(anyhow!("public_key is rquired"))?;
         let header_len = (HEADER_FIX_LEN + public_key.len()) as u8;
         Ok(Handshake::unchecked(
             [
                 &[header_len] as &[u8],
                 &private_ipv4.octets(),
+                &public_ipv4.octets(),
+                &[
+                    (self.public_port >> 8) as u8,
+                    (self.public_port & 0b11111111) as u8,
+                ] as &[u8],
                 public_key.as_ref(),
             ]
             .concat(),
@@ -92,6 +117,18 @@ impl Default for HandshakePacketBuilder {
 impl HandshakePacketBuilder {
     pub fn private_ipv4(mut self, value: Ipv4Addr) -> Result<Self> {
         self.private_ipv4 = Some(value);
+
+        Ok(self)
+    }
+
+    pub fn public_ipv4(mut self, value: Ipv4Addr) -> Result<Self> {
+        self.public_ipv4 = Some(value);
+
+        Ok(self)
+    }
+
+    pub fn public_port(mut self, value: u16) -> Result<Self> {
+        self.public_port = value;
 
         Ok(self)
     }
