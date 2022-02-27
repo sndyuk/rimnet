@@ -4,6 +4,9 @@ Secure container anywahere.
 The Secure peer-to-peer overlay TCP/IP network.
 
 #### Features
+- Machine:
+  - [x] Linux
+  - [ ] MacOS
 - [x] Connect the peer agents using Noise protocol.
 - [ ] NAT hole punching.
 - CLI:
