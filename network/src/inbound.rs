@@ -36,6 +36,8 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
     // Listen the tunnel(encrypted payload <==> raw payload) traffic port
     let tunnel_sock_addr =
         Arc::new(UdpSocket::bind(format!("{}:{}", config.public_ipv4, config.public_port)).await?);
+    // Set 128 to make connections stable.
+    tunnel_sock_addr.set_ttl(128)?;
     log::info!(
         "The tunnel listening on {:?}",
         tunnel_sock_addr.local_addr()?
