@@ -155,8 +155,8 @@ async fn listen_inbound_incomming(
                                 let handshake_packet =
                                     gateway::packet::HandshakePacketBuilder::new()?
                                         .private_ipv4(private_ipv4.clone())?
-                                        .public_ipv4(knock_packet.public_ipv4())?
-                                        .public_port(knock_packet.public_port())?
+                                        .public_ipv4(public_ipv4.clone())?
+                                        .public_port(public_port)?
                                         .public_key(public_key)?
                                         .build()?;
 
@@ -434,6 +434,8 @@ async fn listen_inbound_outgoing(
                         );
                         let handshake_packet = gateway::packet::HandshakePacketBuilder::new()?
                             .private_ipv4(private_ipv4.clone())?
+                            .public_ipv4(public_ipv4.clone())?
+                            .public_port(public_port)?
                             .public_key(public_key.to_vec())?
                             .build()?;
 
