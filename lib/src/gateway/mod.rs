@@ -46,7 +46,7 @@ pub async fn send(
             msg_len
         ));
     } else {
-        log::trace!("messge sent");
+        log::trace!("messge sent to {:?}", sock);
     }
     Ok(())
 }

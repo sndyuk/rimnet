@@ -111,11 +111,11 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
     });
 
     tokio::select!(
-        v = rx1 => {
-            log::info!("[Inbound / incomming] {:?}", v);
+        _ = rx1 => {
+            log::error!("[Inbound / incomming] Killed by unknown error");
         },
-        v = rx2 => {
-            log::info!("[Inbound / outgoing] {:?}", v);
+        _ = rx2 => {
+            log::error!("[Inbound / outgoing] Killed by unknown error");
         }
     );
     Ok(())
@@ -155,6 +155,8 @@ async fn listen_inbound_incomming(
                                 let handshake_packet =
                                     gateway::packet::HandshakePacketBuilder::new()?
                                         .private_ipv4(private_ipv4.clone())?
+                                        .public_ipv4(knock_packet.public_ipv4())?
+                                        .public_port(knock_packet.public_port())?
                                         .public_key(public_key)?
                                         .build()?;
 
