@@ -112,11 +112,11 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
     });
 
     tokio::select!(
-        v = rx1 => {
-            log::info!("[Inbound / incomming] {:?}", v);
+        _ = rx1 => {
+            log::error!("[Inbound / incomming] Killed by unknown error");
         },
-        v = rx2 => {
-            log::info!("[Inbound / outgoing] {:?}", v);
+        _ = rx2 => {
+            log::error!("[Inbound / outgoing] Killed by unknown error");
         }
     );
     Ok(())
