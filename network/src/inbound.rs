@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::Ipv4Addr;
 
 use crate::device::NetworkDevice;
 use futures::StreamExt;
@@ -89,7 +89,6 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
             match listen_inbound_outgoing(
                 &mut device.reader,
                 &tunnel_sock_addr,
-                config.public_port,
                 network,
                 &private_key,
                 &public_key,
@@ -344,7 +343,6 @@ async fn receive_handshake(
 async fn listen_inbound_outgoing(
     tun_reader: &mut FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>,
     main_sock: &UdpSocket,
-    main_port: u16,
     network: Arc<Mutex<Network>>,
     private_key: &Vec<u8>,
     public_key: &Vec<u8>,
