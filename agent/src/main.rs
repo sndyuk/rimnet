@@ -46,7 +46,6 @@ async fn main() -> Result<()> {
                 },
             ),
         )
-        .pretty()
         .init();
 
     // Prepare keypair of the agent
@@ -73,7 +72,8 @@ async fn main() -> Result<()> {
         network_config_builder = network_config_builder.public_port(v)?;
     }
     if let Some(v) = opts.external_public_ipv4 {
-        network_config_builder = network_config_builder.external_public_ipv4(v.parse::<Ipv4Addr>()?)?;
+        network_config_builder =
+            network_config_builder.external_public_ipv4(v.parse::<Ipv4Addr>()?)?;
     }
     if let Some(v) = opts.external_public_port {
         network_config_builder = network_config_builder.external_public_port(v)?;
