@@ -261,7 +261,6 @@ dependencies = [
  "clap",
  "lib",
  "network",
- "regex",
  "tokio",
 ]
 
@@ -627,6 +626,7 @@ dependencies = [
  "lib",
  "network",
  "packet",
+ "regex",
  "ring",
  "snow",
  "thiserror",

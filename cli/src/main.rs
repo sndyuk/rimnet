@@ -1,8 +1,5 @@
 use anyhow::*;
 use clap::Parser;
-use lib::gateway::{self, packet::Protocol};
-use std::net::{Ipv4Addr, SocketAddr};
-use tokio::net::UdpSocket;
 
 #[derive(Parser, Debug)]
 struct Opts {
@@ -76,6 +73,10 @@ async fn knock(
     target_external_public_ipv4: &str,
     target_external_public_port: u16,
 ) -> Result<()> {
+    use lib::gateway::{self, packet::Protocol};
+    use std::net::{Ipv4Addr, SocketAddr};
+    use tokio::net::UdpSocket;
+
     // Connect to the remote client
     let mut sock = UdpSocket::bind(format!("{}:0", public_ipv4)).await?;
     println!("binded to the local address {}", sock.local_addr()?);
@@ -109,22 +110,7 @@ async fn knock(
 }
 
 async fn cert(name: &str) -> Result<()> {
-    use network::*;
-    use regex::Regex;
-    use std::fs;
-
-    let re = Regex::new(r"^[a-zA-Z][0-9a-zA-Z\.]{2,22}$").unwrap();
-    if !re.is_match(name) {
-        return Err(anyhow!(
-            "name must be alphanumerics and dots and smaller than 24 characters"
-        ));
-    }
-
-    let keypair = generate_keypair()?;
-    let public_key = base64::encode(keypair.public);
-    let private_key = base64::encode(keypair.private);
-    fs::write(format!("{}.pub", name), public_key)?;
-    fs::write(format!("{}", name), private_key)?;
-
+    use network::generate_keypair;
+    generate_keypair()?.save_to_file(name)?;
     Ok(())
 }
