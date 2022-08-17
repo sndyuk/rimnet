@@ -260,6 +260,8 @@ dependencies = [
  "base64",
  "clap",
  "lib",
+ "network",
+ "regex",
  "tokio",
 ]
 

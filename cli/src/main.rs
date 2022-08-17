@@ -14,6 +14,8 @@ struct Opts {
 enum Command {
     #[clap(version = "1.0")]
     Knock(KnockOpts),
+    #[clap(version = "1.0")]
+    Cert(CertOpts),
 }
 
 #[derive(Parser, Debug)]
@@ -34,6 +36,12 @@ struct KnockOpts {
     target_external_public_port: u16,
 }
 
+#[derive(Parser, Debug)]
+struct CertOpts {
+    #[clap(short, long)]
+    name: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
@@ -49,6 +57,9 @@ async fn main() -> Result<()> {
                 args.target_external_public_port,
             )
             .await?;
+        }
+        Command::Cert(args) => {
+            cert(&args.name).await?;
         }
     }
 
@@ -94,5 +105,26 @@ async fn knock(
     gateway::send(&mut sock, &packet, &target_addr).await?;
 
     // TODO: Verify the peer accepted the request.
+    Ok(())
+}
+
+async fn cert(name: &str) -> Result<()> {
+    use network::*;
+    use regex::Regex;
+    use std::fs;
+
+    let re = Regex::new(r"^[a-zA-Z][0-9a-zA-Z\.]{2,22}$").unwrap();
+    if !re.is_match(name) {
+        return Err(anyhow!(
+            "name must be alphanumerics and dots and smaller than 24 characters"
+        ));
+    }
+
+    let keypair = generate_keypair()?;
+    let public_key = base64::encode(keypair.public);
+    let private_key = base64::encode(keypair.private);
+    fs::write(format!("{}.pub", name), public_key)?;
+    fs::write(format!("{}", name), private_key)?;
+
     Ok(())
 }
