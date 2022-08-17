@@ -34,6 +34,15 @@ impl Keypair {
 
         Ok(())
     }
+
+    pub fn load(path: &str) -> Result<Keypair> {
+        let public_key = fs::read_to_string(format!("{}.pub", path))?;
+        let private_key = fs::read_to_string(path)?;
+        Ok(Keypair {
+            public: base64::decode(public_key)?,
+            private: base64::decode(private_key)?,
+        })
+    }
 }
 
 pub fn generate_keypair() -> Result<Keypair> {

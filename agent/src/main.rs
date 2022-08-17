@@ -26,6 +26,8 @@ struct Opts {
     #[clap(short, long)]
     mtu: Option<i32>,
     #[clap(short, long)]
+    cert_path: Option<String>,
+    #[clap(short, long)]
     verbose: bool,
 }
 
@@ -49,7 +51,12 @@ async fn main() -> Result<()> {
         .init();
 
     // Prepare keypair of the agent
-    let keypair = generate_keypair()?;
+    let keypair = if let Some(ref cert_path) = opts.cert_path {
+        Keypair::load(cert_path)?
+    } else {
+        let keypair = generate_keypair()?;
+        keypair
+    };
     log::info!("public key: {:?}", base64::encode(&keypair.public));
 
     // Start the inbound network
