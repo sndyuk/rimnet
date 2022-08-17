@@ -87,14 +87,14 @@ $ sudo ip netns exec rimnet_1 sudo tcpdump -i test-dev
 
 ### Send message to the agent
 
-#### Run dummy TCP client first for the following examples
+#### Run dummy TCP server first for the following examples
 
 ```sh
 $ sudo ip netns exec rimnet_1 nc -l 10.0.0.3 8080
 ```
 
 #### Example 1. Confirm running the agent
-The peer client will show a handshake error log.
+The peer client will show the log "The peer(10.0.0.1) not found".
 
 ```sh
 $ sudo ip netns exec rimnet_1 nc -u 10.0.0.1 7891
@@ -141,4 +141,19 @@ The node is going to run on the new sandbox network `rimnet_2`.
     --- 10.0.0.3 ping statistics ---
     1 packets transmitted, 1 received, 0% packet loss, time 0ms
     rtt min/avg/max/mdev = 2.170/2.170/2.170/0.000 ms
+    ```
+
+4. Send HTTP request
+
+    ```sh
+    $ sudo ip netns exec rimnet_2 curl http://10.0.0.3:8080
+    ```
+    (!) It won't be terminated since the target server, ran by nc command above, doesn't have HTTP feature.
+    The target server should output the following dump:
+    ```sh
+    $ sudo ip netns exec rimnet_1 nc -l 10.0.0.3 8080
+    GET / HTTP/1.1
+    Host: 10.0.0.3:8080
+    User-Agent: curl/7.61.1
+    Accept: */*
     ```
