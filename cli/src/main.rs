@@ -17,20 +17,16 @@ enum Command {
 
 #[derive(Parser, Debug)]
 struct KnockOpts {
-    #[clap(short, long)]
-    public_key: String,
-    #[clap(long)]
-    private_ipv4: String,
     #[clap(long, default_value = "0.0.0.0")]
-    public_ipv4: String,
-    #[clap(long)]
-    external_public_ipv4: String,
-    #[clap(long, default_value = "7891")]
-    external_public_port: u16,
-    #[clap(long)]
-    target_external_public_ipv4: String,
+    ipv4: String,
     #[clap(short, long, default_value = "7891")]
-    target_external_public_port: u16,
+    port: u16,
+    #[clap(long)]
+    target_private_ipv4: String,
+    #[clap(long)]
+    target_public_ipv4: String,
+    #[clap(short, long, default_value = "7891")]
+    target_public_port: u16,
 }
 
 #[derive(Parser, Debug)]
@@ -45,13 +41,11 @@ async fn main() -> Result<()> {
     match opts.command {
         Command::Knock(args) => {
             knock(
-                &args.private_ipv4,
-                &args.public_ipv4,
-                &args.external_public_ipv4,
-                args.external_public_port,
-                base64::decode(args.public_key)?,
-                &args.target_external_public_ipv4,
-                args.target_external_public_port,
+                &args.ipv4,
+                args.port,
+                &args.target_private_ipv4,
+                &args.target_public_ipv4,
+                args.target_public_port,
             )
             .await?;
         }
@@ -59,17 +53,13 @@ async fn main() -> Result<()> {
             cert(&args.name).await?;
         }
     }
-
-    println!("all done.");
     Ok(())
 }
 
 async fn knock(
-    private_ipv4: &str,
-    public_ipv4: &str,
-    external_public_ipv4: &str,
-    external_public_port: u16,
-    public_key: Vec<u8>,
+    ipv4: &str,
+    port: u16,
+    target_private_ipv4: &str,
     target_external_public_ipv4: &str,
     target_external_public_port: u16,
 ) -> Result<()> {
@@ -77,35 +67,26 @@ async fn knock(
     use std::net::{Ipv4Addr, SocketAddr};
     use tokio::net::UdpSocket;
 
+    let my_addr = format!("{}:{}", ipv4, port).parse::<SocketAddr>()?;
+
     // Connect to the remote client
-    let mut sock = UdpSocket::bind(format!("{}:0", public_ipv4)).await?;
-    println!("binded to the local address {}", sock.local_addr()?);
-    let target_addr = format!(
-        "{}:{}",
-        target_external_public_ipv4, target_external_public_port
-    )
-    .parse::<SocketAddr>()?;
-    println!("connecting to {} ...", target_addr);
+    let mut sock = UdpSocket::bind(format!("{}:0", ipv4)).await?;
+    println!("connecting to {} ...", my_addr);
 
     // Knock knock
-    let knock_packet = gateway::packet::KnockPacketBuilder::new()?
-        .private_ipv4(private_ipv4.parse::<Ipv4Addr>()?)?
-        .public_ipv4(external_public_ipv4.parse::<Ipv4Addr>()?)?
-        .public_port(external_public_port)?
-        .public_key(public_key)?
+    let knock1_packet = gateway::packet::Knock1PacketBuilder::new()?
+        .private_ipv4(target_private_ipv4.parse::<Ipv4Addr>()?)?
+        .public_ipv4(target_external_public_ipv4.parse::<Ipv4Addr>()?)?
+        .public_port(target_external_public_port)?
         .build()?;
-    println!("knock packet: {:?}", knock_packet);
 
     let packet = gateway::packet::PacketBuilder::new()?
-        .protocol(Protocol::Knock)?
-        .add_payload(knock_packet.as_ref())?
+        .protocol(Protocol::Knock1)?
+        .add_payload(knock1_packet.as_ref())?
         .build()?;
 
-    println!("packet: {:?}", packet);
-
-    gateway::send(&mut sock, &packet, &target_addr).await?;
-
-    // TODO: Verify the peer accepted the request.
+    gateway::send(&mut sock, &packet, &my_addr).await?;
+    println!("Sent knock1 packet: {:?} to {}", knock1_packet, my_addr);
     Ok(())
 }
 

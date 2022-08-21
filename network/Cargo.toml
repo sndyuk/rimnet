@@ -24,6 +24,10 @@ hex = "0.4"
 lazy_static = "1.4"
 base64 = "0"
 regex = "1"
+sled = "0"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+rand = "0"
 
 [dev-dependencies]
 network = { version = "0.1.0", path = "../network" }

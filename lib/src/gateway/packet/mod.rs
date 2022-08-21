@@ -2,8 +2,11 @@ use anyhow::Result;
 use snow::HandshakeState;
 use std::fmt;
 
-pub mod knock;
-pub use knock::*;
+pub mod knock1;
+pub use knock1::*;
+
+pub mod knock2;
+pub use knock2::*;
 
 pub mod handshake;
 pub use handshake::*;
@@ -17,8 +20,15 @@ const HEADER_FIX_LEN: usize = 3;
 #[repr(u8)]
 pub enum Protocol {
     // ↓ Not signed
-    Knock = 0b0_0001,
+
+    // Execute knock.
+    Knock1 = 0b0_0001,
+    // Actual knock. It triggers handshake process.
+    Knock2 = 0b0_0010,
+
     // ↓ Signed
+
+    // Accept inbound connection from a source agent. The source agent can send packets to the destination agent.
     Handshake = 0b1_0001,
     TcpIp = 0b1_0010, // TODO: Not signed yet
 
@@ -28,7 +38,8 @@ pub enum Protocol {
 impl From<u8> for Protocol {
     fn from(v: u8) -> Self {
         match v {
-            0b0_0001 => Protocol::Knock,
+            0b0_0001 => Protocol::Knock1,
+            0b0_0010 => Protocol::Knock2,
             0b1_0001 => Protocol::Handshake,
             0b1_0010 => Protocol::TcpIp,
             _ => Protocol::Unknown,
@@ -99,10 +110,16 @@ impl<B: AsRef<[u8]>> Packet<B> {
         self.protocol() != Protocol::Unknown
     }
 
-    pub fn to_knock(&mut self) -> Result<Knock<impl AsRef<[u8]>>> {
-        assert!(self.protocol() == Protocol::Knock);
-        let knock = Knock::unchecked(self.payload());
-        Ok(knock)
+    pub fn to_knock1(&mut self) -> Result<Knock1<impl AsRef<[u8]>>> {
+        assert!(self.protocol() == Protocol::Knock1);
+        let knock1 = Knock1::unchecked(self.payload());
+        Ok(knock1)
+    }
+
+    pub fn to_knock2(&mut self) -> Result<Knock2<impl AsRef<[u8]>>> {
+        assert!(self.protocol() == Protocol::Knock2);
+        let knock2 = Knock2::unchecked(self.payload());
+        Ok(knock2)
     }
 
     pub fn to_handshake(&mut self, hs: &mut HandshakeState) -> Result<Handshake<impl AsRef<[u8]>>> {

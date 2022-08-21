@@ -11,6 +11,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 - [ ] NAT hole punching.
 - CLI:
   - [x] `knock` command: to request handshake.
+  - [x] `cert` command: to issue a client cert.
 - Web GUI:
   - [ ] TBD
 - Reconnect the peer agent if the target agent lost the state:
@@ -126,12 +127,17 @@ The node is going to run on the new sandbox network `rimnet_2`.
     ```
 
 2. Knock to the peer node from the new node.
-
+    It will only accept the incomming request from the peer node(10.0.0.4) to the source node(10.0.0.3).
     ```sh
-    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock --private-ipv4 10.0.0.3 --external-public-ipv4 10.0.254.1 --target-external-public-ipv4 10.0.254.2 --public-key <KEY_1>
+    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock --ipv4 10.0.254.2 --target-private-ipv4 10.0.0.4 --target-public-ipv4 10.0.254.2
     ```
 
-3. Send ping packet.
+    Opposite as well.
+    ```sh
+    $ cargo build -p cli && sudo ip netns exec rimnet_2 target/debug/cli knock --ipv4 10.0.254.3 --target-private-ipv4 10.0.0.3 --target-public-ipv4 10.0.254.1
+    ```
+
+3. Send a ping packet.
 
     ```sh
     $ sudo ip netns exec rimnet_2 ping 10.0.0.3 -c 1
@@ -157,3 +163,4 @@ The node is going to run on the new sandbox network `rimnet_2`.
     User-Agent: curl/7.61.1
     Accept: */*
     ```
+

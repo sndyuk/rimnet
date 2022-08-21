@@ -1,17 +1,18 @@
 use anyhow::*;
 use std::{fmt, net::Ipv4Addr};
 
-pub const HEADER_FIX_LEN: usize = 15;
+pub const HEADER_FIX_LEN: usize = 17;
 
 #[derive(Copy, Clone)]
-pub struct Knock<B> {
+pub struct Knock2<B> {
     buffer: B,
 }
 
-impl<B: AsRef<[u8]>> fmt::Debug for Knock<B> {
+impl<B: AsRef<[u8]>> fmt::Debug for Knock2<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("rimnet::packet::Knock")
+        f.debug_struct("rimnet::packet::Knock2")
             .field("private_ipv4", &self.private_ipv4())
+            .field("nonce", &self.nonce())
             .field("public_ipv4", &self.public_ipv4())
             .field("public_port", &self.public_port())
             .field("target_private_ipv4", &self.target_private_ipv4())
@@ -20,15 +21,15 @@ impl<B: AsRef<[u8]>> fmt::Debug for Knock<B> {
     }
 }
 
-impl<B: AsRef<[u8]>> AsRef<[u8]> for Knock<B> {
+impl<B: AsRef<[u8]>> AsRef<[u8]> for Knock2<B> {
     fn as_ref(&self) -> &[u8] {
         &self.buffer.as_ref()
     }
 }
 
-impl<B: AsRef<[u8]>> Knock<B> {
-    pub fn unchecked(buffer: B) -> Knock<B> {
-        Knock { buffer }
+impl<B: AsRef<[u8]>> Knock2<B> {
+    pub fn unchecked(buffer: B) -> Knock2<B> {
+        Knock2 { buffer }
     }
 
     pub fn header_len(&self) -> u8 {
@@ -44,25 +45,29 @@ impl<B: AsRef<[u8]>> Knock<B> {
         )
     }
 
+    pub fn nonce(&self) -> u16 {
+        ((self.buffer.as_ref()[5] as u16) << 8) | (self.buffer.as_ref()[6] as u16)
+    }
+
     pub fn public_ipv4(&self) -> Ipv4Addr {
         Ipv4Addr::new(
-            self.buffer.as_ref()[5],
-            self.buffer.as_ref()[6],
             self.buffer.as_ref()[7],
             self.buffer.as_ref()[8],
+            self.buffer.as_ref()[9],
+            self.buffer.as_ref()[10],
         )
     }
 
     pub fn public_port(&self) -> u16 {
-        ((self.buffer.as_ref()[9] as u16) << 8) | (self.buffer.as_ref()[10] as u16)
+        ((self.buffer.as_ref()[11] as u16) << 8) | (self.buffer.as_ref()[12] as u16)
     }
 
     pub fn target_private_ipv4(&self) -> Ipv4Addr {
         Ipv4Addr::new(
-            self.buffer.as_ref()[11],
-            self.buffer.as_ref()[12],
             self.buffer.as_ref()[13],
             self.buffer.as_ref()[14],
+            self.buffer.as_ref()[15],
+            self.buffer.as_ref()[16],
         )
     }
 
@@ -77,18 +82,20 @@ impl<B: AsRef<[u8]>> Knock<B> {
 }
 
 #[derive(Debug)]
-pub struct KnockPacketBuilder {
+pub struct Knock2PacketBuilder {
     private_ipv4: Option<Ipv4Addr>,
+    nonce: u16,
     public_ipv4: Option<Ipv4Addr>,
     public_port: u16,
     public_key: Option<Vec<u8>>,
     target_private_ipv4: Option<Ipv4Addr>,
 }
 
-impl KnockPacketBuilder {
+impl Knock2PacketBuilder {
     pub fn new() -> Result<Self> {
-        Ok(KnockPacketBuilder {
+        Ok(Knock2PacketBuilder {
             private_ipv4: None,
+            nonce: 0,
             public_ipv4: None,
             public_port: 0,
             public_key: None,
@@ -96,7 +103,7 @@ impl KnockPacketBuilder {
         })
     }
 
-    pub fn build(self) -> Result<Knock<Vec<u8>>> {
+    pub fn build(self) -> Result<Knock2<Vec<u8>>> {
         let private_ipv4 = self
             .private_ipv4
             .ok_or(anyhow!("private_ipv4 is rquired"))?;
@@ -106,10 +113,11 @@ impl KnockPacketBuilder {
             .public_ipv4
             .ok_or(anyhow!("target_private_ipv4 is rquired"))?;
         let header_len = (HEADER_FIX_LEN + public_key.len()) as u8;
-        Ok(Knock::unchecked(
+        Ok(Knock2::unchecked(
             [
                 &[header_len] as &[u8],
                 &private_ipv4.octets(),
+                &[(self.nonce >> 8) as u8, (self.nonce & 0b11111111) as u8] as &[u8],
                 &public_ipv4.octets(),
                 &[
                     (self.public_port >> 8) as u8,
@@ -123,15 +131,21 @@ impl KnockPacketBuilder {
     }
 }
 
-impl Default for KnockPacketBuilder {
+impl Default for Knock2PacketBuilder {
     fn default() -> Self {
-        KnockPacketBuilder::new().unwrap()
+        Knock2PacketBuilder::new().unwrap()
     }
 }
 
-impl KnockPacketBuilder {
+impl Knock2PacketBuilder {
     pub fn private_ipv4(mut self, value: Ipv4Addr) -> Result<Self> {
         self.private_ipv4 = Some(value);
+
+        Ok(self)
+    }
+
+    pub fn nonce(mut self, value: u16) -> Result<Self> {
+        self.nonce = value;
 
         Ok(self)
     }

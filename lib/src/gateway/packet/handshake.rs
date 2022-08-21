@@ -1,7 +1,7 @@
 use anyhow::*;
 use std::{fmt, net::Ipv4Addr};
 
-pub const HEADER_FIX_LEN: usize = 11;
+pub const HEADER_FIX_LEN: usize = 13;
 
 #[derive(Copy, Clone)]
 pub struct Handshake<B> {
@@ -13,6 +13,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for Handshake<B> {
         f.debug_struct("rimnet::packet::Handshake")
             .field("header_len", &self.header_len())
             .field("private_ipv4", &self.private_ipv4())
+            .field("nonce", &self.nonce())
             .field("public_ipv4", &self.public_ipv4())
             .field("public_port", &self.public_port())
             .field("public_key", &base64::encode(&self.public_key()))
@@ -44,17 +45,21 @@ impl<B: AsRef<[u8]>> Handshake<B> {
         )
     }
 
+    pub fn nonce(&self) -> u16 {
+        ((self.buffer.as_ref()[5] as u16) << 8) | (self.buffer.as_ref()[6] as u16)
+    }
+
     pub fn public_ipv4(&self) -> Ipv4Addr {
         Ipv4Addr::new(
-            self.buffer.as_ref()[5],
-            self.buffer.as_ref()[6],
             self.buffer.as_ref()[7],
             self.buffer.as_ref()[8],
+            self.buffer.as_ref()[9],
+            self.buffer.as_ref()[10],
         )
     }
 
     pub fn public_port(&self) -> u16 {
-        ((self.buffer.as_ref()[9] as u16) << 8) | (self.buffer.as_ref()[10] as u16)
+        ((self.buffer.as_ref()[11] as u16) << 8) | (self.buffer.as_ref()[12] as u16)
     }
 
     pub fn public_key(&self) -> &[u8] {
@@ -70,6 +75,7 @@ impl<B: AsRef<[u8]>> Handshake<B> {
 #[derive(Debug)]
 pub struct HandshakePacketBuilder {
     private_ipv4: Option<Ipv4Addr>,
+    nonce: u16,
     public_ipv4: Option<Ipv4Addr>,
     public_port: u16,
     public_key: Option<Vec<u8>>,
@@ -79,6 +85,7 @@ impl HandshakePacketBuilder {
     pub fn new() -> Result<Self> {
         Ok(HandshakePacketBuilder {
             private_ipv4: None,
+            nonce: 0,
             public_ipv4: None,
             public_port: 0,
             public_key: None,
@@ -96,6 +103,7 @@ impl HandshakePacketBuilder {
             [
                 &[header_len] as &[u8],
                 &private_ipv4.octets(),
+                &[(self.nonce >> 8) as u8, (self.nonce & 0b11111111) as u8] as &[u8],
                 &public_ipv4.octets(),
                 &[
                     (self.public_port >> 8) as u8,
@@ -117,6 +125,12 @@ impl Default for HandshakePacketBuilder {
 impl HandshakePacketBuilder {
     pub fn private_ipv4(mut self, value: Ipv4Addr) -> Result<Self> {
         self.private_ipv4 = Some(value);
+
+        Ok(self)
+    }
+
+    pub fn nonce(mut self, value: u16) -> Result<Self> {
+        self.nonce = value;
 
         Ok(self)
     }
