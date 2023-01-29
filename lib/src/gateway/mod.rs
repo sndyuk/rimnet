@@ -15,8 +15,13 @@ pub async fn recv(
     let mut msg_len_buf = [0u8; 2];
     let (rcv_len, src) = sock.peek_from(&mut msg_len_buf).await?;
     if rcv_len != 2 {
+        // Drop the invalid message.
+        let mut msg = vec![0u8; rcv_len];
+        sock.recv(&mut msg).await?;
+
         return Err(anyhow!(
-            "Invalid packet: received message length doesn't match"
+            "Invalid packet: received message length doesn't match. rcv_len={}",
+            rcv_len
         ));
     }
     let msg_len = ((msg_len_buf[0] as usize) << 8) + (msg_len_buf[1] as usize);
@@ -24,7 +29,9 @@ pub async fn recv(
     let rcv_len = sock.recv(&mut msg).await?;
     if rcv_len != msg_len {
         return Err(anyhow!(
-            "Invalid packet: received message length doesn't match"
+            "Invalid packet: received message length doesn't match. rcv_len={}, msg_len={}",
+            rcv_len,
+            msg_len
         ));
     } else {
         log::trace!("messge received");

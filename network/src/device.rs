@@ -15,14 +15,15 @@ fn create(
     private_ipv4: &Ipv4Addr,
     mtu: i32,
 ) -> Result<(ReadHalf<AsyncDevice>, WriteHalf<AsyncDevice>)> {
-    let mut devince_name = name;
+    let mut device_name = name;
     #[cfg(target_os = "macos")]
     {
-        devince_name = &mut "utun0";
+        log::info!("MacOS detected, using \"utunN\" instead of the specified device name \"{}\"", device_name);
+        device_name = &mut "utun0";
     }
 
     let mut tun = tun::Configuration::default();
-    tun.name(devince_name)
+    tun.name(device_name)
         .address(private_ipv4)
         .layer(tun::Layer::L3)
         .netmask((255, 255, 255, 0))
