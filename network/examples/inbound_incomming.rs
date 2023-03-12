@@ -94,7 +94,7 @@ async fn send_sample_messages(
 
     // Send data
     for _ in 0..1 {
-        let ipv4_packet = packet::ip::v4::Packet::unchecked(
+        let sample_ipv4_packet = packet::ip::v4::Packet::unchecked(
             packet::ip::v4::Builder::default()
                 .protocol(packet::ip::Protocol::Udp)?
                 .id(44616)?
@@ -110,14 +110,14 @@ async fn send_sample_messages(
         );
         println!(
             "payload(HEX): {:?}",
-            ipv4_packet
+            sample_ipv4_packet
                 .payload()
                 .iter()
                 .map(|n| format!("{:02X}", n))
                 .collect::<String>()
         );
 
-        let cap: [u8; 8] = [
+        let capability: [u8; 8] = [
             0b0000_0010,
             0b0000_0010,
             0b0000_0100,
@@ -130,8 +130,8 @@ async fn send_sample_messages(
 
         let tcpip_packet = gateway::packet::TcpIpPacketBuilder::new()?
             .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
-            .capability(cap.to_vec())?
-            .add_payload(ipv4_packet.as_ref())?
+            .capability(capability.to_vec())?
+            .add_payload(sample_ipv4_packet.as_ref())?
             .build()?;
         println!("tcpip packet: {:?}", tcpip_packet);
 

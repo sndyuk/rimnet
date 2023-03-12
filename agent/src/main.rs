@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
             tracing_subscriber::filter::EnvFilter::try_from_env("RIMNET_LOG").unwrap_or_else(
                 |_| {
                     tracing_subscriber::filter::EnvFilter::new(if opts.verbose {
-                        "DEBUG"
+                        "TRACE,sled=DEBUG"
                     } else {
                         "INFO"
                     })

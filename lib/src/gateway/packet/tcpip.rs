@@ -3,6 +3,19 @@ use std::{fmt, net::Ipv4Addr};
 
 pub const HEADER_FIX_LEN: usize = 5;
 
+/*
+
+# Protocol format
+Header part + Payload part (any protocol)
+
+## Header part
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|   Header len  |                  Source IPv4                  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|               |                   Capability                ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ */
 #[derive(Copy, Clone)]
 pub struct TcpIp<B> {
     total_len: u16,

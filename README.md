@@ -38,10 +38,15 @@ The Secure peer-to-peer overlay TCP/IP network.
     listening on 10.0.254.1:7891
     ```
 
-1-b. Run the agent on a container
+    Or you can run the agent on a linux container:
 
     ```sh
-    $ cargo build -p agent --release && sudo target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the container> --external-public-ipv4 <public IPv4 address of the host machine> --external-public-port <public port of the host machine>
+    # Inside a container
+    # e.g. 
+    # $ docker run --privileged -it --rm -v `pwd`/.:/usr/src/app -p 7991:7891 rust:1.63
+    # > cd /usr/src/app
+    # > cargo build -p agent --release && target/release/agent --private-ipv4 10.0.0.4 --public-ipv4 172.17.0.2 --external-public-ipv4 192.168.1.5 --external-public-port 7991
+    $ cargo build -p agent --release && target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the container> --external-public-ipv4 <public IPv4 address of the host machine> --external-public-port <public port of the host machine>
     public key: <KEY_2>
     listening on 10.0.254.1:7891
     ```
@@ -54,7 +59,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 3. Knock to the peer agent from the new node.
 
     ```sh
-    $ cargo build -p cli --release && target/release/cli knock --private-ipv4 10.0.0.4 --external-public-ipv4 <public IPv4 address of the host machine> --target-exteral-public-ipv4 <public IPv4 address of the target host machine> --public-key <KEY_2>
+    $ cargo build -p cli --release && target/release/cli knock --ipv4 <public IPv4 address of the machine> --target-private-ipv4 <private IPv4 address of the target agent> --target-public-ipv4 <public IPv4 address of the target host machine>
     ```
 
 

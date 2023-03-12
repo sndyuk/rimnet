@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use packet::Packet;
 use std::net::Ipv4Addr;
 
 use crate::device::NetworkDevice;
@@ -125,6 +124,7 @@ pub async fn run(config: NetworkConfig) -> Result<()> {
     Ok(())
 }
 
+// Consume messages comming from the tunnel
 async fn listen_inbound_incomming(
     tun_writer: &mut WriteHalf<AsyncDevice>,
     main_sock: &UdpSocket,
@@ -418,6 +418,7 @@ async fn receive_handshake(
     }
 }
 
+// Transfer message from the TUN device to the remote peer
 async fn listen_inbound_outgoing(
     tun_reader: &mut FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>,
     main_sock: &UdpSocket,
@@ -433,7 +434,10 @@ async fn listen_inbound_outgoing(
     loop {
         match tun_reader.next().await {
             Some(Ok(raw_packet)) => {
+                // Raw packet received from the TUN device
                 let raw_packet_bytes = raw_packet.get_bytes();
+
+                // It should be IPv4 packet. Otherwise, drop it.
                 let payload_packet = match raw_packet_bytes[0] >> 4 {
                     4 => packet::ip::v4::Packet::unchecked(raw_packet_bytes),
                     6 => {
@@ -451,6 +455,7 @@ async fn listen_inbound_outgoing(
                         continue;
                     }
                 };
+                
                 let peer_private_addr = payload_packet.destination();
                 if peer_private_addr.is_multicast() {
                     // TODO: It should be configurable whether skip or ingest. Need any concrete usecase.
@@ -470,7 +475,34 @@ async fn listen_inbound_outgoing(
                 }
 
                 match peers_cache.get_mut(&peer_private_addr) {
-                    // Received packet to an unknown peer.
+                    // Received packet to a registered peer
+                    Some(peer) => {
+                        log::debug!("[Inbound / outgoing] Transferring the packet");
+                        let packet = gateway::packet::PacketBuilder::new()?
+                            .protocol(gateway::packet::Protocol::TcpIp)?
+                            .add_payload(gateway::packet::TcpIpPacketBuilder::new()?
+                            .source_ipv4(private_ipv4.clone())?
+                            .add_payload(payload_packet.as_ref())?
+                            .build()?.as_ref())?
+                            .build()?;
+
+                        match gateway::send(main_sock, &packet, &peer.public_addr).await {
+                            Ok(_) => {
+                                log::debug!(
+                                        "[Inbound / outgoing] Sent packet. peer_private={}, peer_public={}",
+                                        peer_private_addr, peer.public_addr
+                                    );
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                        "[Inbound / outgoing] Could not send the data. peer_private={}, reason={}",
+                                        peer_private_addr,
+                                        e
+                                    );
+                            }
+                        }
+                    }
+                    // Received packet to an unknown peer
                     None => {
                         let network = network.lock().await;
                         let peer_node = match network.get(&peer_private_addr)? {
@@ -570,35 +602,6 @@ async fn listen_inbound_outgoing(
                             }
                             Err(e) => {
                                 log::warn!("[Inbound / outgoing] Handshake failed. peer_private={}, reason={}", peer_private_addr, e);
-                            }
-                        }
-                    }
-                    // Received packet to a registered peer
-                    Some(peer) => {
-                        log::debug!("[Inbound / outgoing] Sending the packet");
-                        let tcpip_packet = gateway::packet::TcpIpPacketBuilder::new()?
-                            .source_ipv4(private_ipv4.clone())?
-                            .add_payload(payload_packet.as_ref())?
-                            .build()?;
-
-                        let packet = gateway::packet::PacketBuilder::new()?
-                            .protocol(gateway::packet::Protocol::TcpIp)?
-                            .add_payload(tcpip_packet.as_ref())?
-                            .build()?;
-
-                        match gateway::send(main_sock, &packet, &peer.public_addr).await {
-                            Ok(_) => {
-                                log::debug!(
-                                        "[Inbound / outgoing] Sent packet. peer_private={}, peer_public={}",
-                                        peer_private_addr, peer.public_addr
-                                    );
-                            }
-                            Err(e) => {
-                                log::warn!(
-                                        "[Inbound / outgoing] Could not send the data. peer_private={}, reason={}",
-                                        peer_private_addr,
-                                        e
-                                    );
                             }
                         }
                     }

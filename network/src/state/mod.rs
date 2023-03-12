@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
-use rand::{OsRng, Rng};
 use serde::{Deserialize, Serialize};
 use serde_yaml;
 use sled;
 use snow::TransportState;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Network {
     db: sled::Db,
@@ -49,8 +49,7 @@ impl Network {
         private_addr: &Ipv4Addr,
         public_addr: SocketAddr,
     ) -> Result<ReservedNode> {
-        let mut rng = OsRng::new()?;
-        let nonce = rng.next_u32() as u16;
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.subsec_nanos() as u16;
         let node = ReservedNode { public_addr, nonce };
         let v = serde_yaml::to_string(&node)?;
         self.db.insert(
