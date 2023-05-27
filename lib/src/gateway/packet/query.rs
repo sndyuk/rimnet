@@ -4,13 +4,13 @@ use std::{fmt, net::Ipv4Addr};
 pub const HEADER_FIX_LEN: usize = 17;
 
 #[derive(Copy, Clone)]
-pub struct Knock2<B> {
+pub struct Query<B> {
     buffer: B,
 }
 
-impl<B: AsRef<[u8]>> fmt::Debug for Knock2<B> {
+impl<B: AsRef<[u8]>> fmt::Debug for Query<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("rimnet::packet::Knock2")
+        f.debug_struct("rimnet::packet::Query")
             .field("private_ipv4", &self.private_ipv4())
             .field("nonce", &self.nonce())
             .field("public_ipv4", &self.public_ipv4())
@@ -21,15 +21,15 @@ impl<B: AsRef<[u8]>> fmt::Debug for Knock2<B> {
     }
 }
 
-impl<B: AsRef<[u8]>> AsRef<[u8]> for Knock2<B> {
+impl<B: AsRef<[u8]>> AsRef<[u8]> for Query<B> {
     fn as_ref(&self) -> &[u8] {
         &self.buffer.as_ref()
     }
 }
 
-impl<B: AsRef<[u8]>> Knock2<B> {
-    pub fn unchecked(buffer: B) -> Knock2<B> {
-        Knock2 { buffer }
+impl<B: AsRef<[u8]>> Query<B> {
+    pub fn unchecked(buffer: B) -> Query<B> {
+        Query { buffer }
     }
 
     pub fn header_len(&self) -> u8 {
@@ -82,7 +82,7 @@ impl<B: AsRef<[u8]>> Knock2<B> {
 }
 
 #[derive(Debug)]
-pub struct Knock2PacketBuilder {
+pub struct QueryPacketBuilder {
     private_ipv4: Option<Ipv4Addr>,
     nonce: u16,
     public_ipv4: Option<Ipv4Addr>,
@@ -91,9 +91,9 @@ pub struct Knock2PacketBuilder {
     target_private_ipv4: Option<Ipv4Addr>,
 }
 
-impl Knock2PacketBuilder {
+impl QueryPacketBuilder {
     pub fn new() -> Result<Self> {
-        Ok(Knock2PacketBuilder {
+        Ok(QueryPacketBuilder {
             private_ipv4: None,
             nonce: 0,
             public_ipv4: None,
@@ -103,7 +103,7 @@ impl Knock2PacketBuilder {
         })
     }
 
-    pub fn build(self) -> Result<Knock2<Vec<u8>>> {
+    pub fn build(self) -> Result<Query<Vec<u8>>> {
         let private_ipv4 = self
             .private_ipv4
             .ok_or(anyhow!("private_ipv4 is rquired"))?;
@@ -113,7 +113,7 @@ impl Knock2PacketBuilder {
             .public_ipv4
             .ok_or(anyhow!("target_private_ipv4 is rquired"))?;
         let header_len = (HEADER_FIX_LEN + public_key.len()) as u8;
-        Ok(Knock2::unchecked(
+        Ok(Query::unchecked(
             [
                 &[header_len] as &[u8],
                 &private_ipv4.octets(),
@@ -131,13 +131,13 @@ impl Knock2PacketBuilder {
     }
 }
 
-impl Default for Knock2PacketBuilder {
+impl Default for QueryPacketBuilder {
     fn default() -> Self {
-        Knock2PacketBuilder::new().unwrap()
+        QueryPacketBuilder::new().unwrap()
     }
 }
 
-impl Knock2PacketBuilder {
+impl QueryPacketBuilder {
     pub fn private_ipv4(mut self, value: Ipv4Addr) -> Result<Self> {
         self.private_ipv4 = Some(value);
 

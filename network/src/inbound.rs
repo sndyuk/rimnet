@@ -145,24 +145,22 @@ async fn listen_inbound_incomming(
                     continue;
                 }
                 match packet.protocol() {
-                    gateway::packet::Protocol::Knock1 => {
-                        log::debug!("[Inbound / incomming] Received a knock1");
-                        match packet.to_knock1() {
-                            Ok(knock1_packet) => {
+                    gateway::packet::Protocol::KnockRequest => {
+                        log::debug!("[Inbound / incomming] Received a knock request");
+                        match packet.to_knock_request() {
+                            Ok(knock_request_packet) => {
                                 // Reserve the node
                                 let peer_public_addr = format!(
                                     "{}:{}",
-                                    knock1_packet.public_ipv4(),
-                                    knock1_packet.public_port()
+                                    knock_request_packet.public_ipv4(),
+                                    knock_request_packet.public_port()
                                 )
                                 .parse::<SocketAddr>()?;
-                                let reserved_node = network.lock().await.reserve_node(
-                                    &knock1_packet.private_ipv4(),
-                                    peer_public_addr,
-                                )?;
+                                let reserved_node =
+                                    network.lock().await.reserve_node(peer_public_addr)?;
 
                                 // Send knock packet
-                                let knock_packet = gateway::packet::Knock2PacketBuilder::new()?
+                                let knock_packet = gateway::packet::KnockPacketBuilder::new()?
                                     .private_ipv4(private_ipv4.clone())?
                                     .nonce(reserved_node.nonce)?
                                     .public_ipv4(external_public_ipv4.clone())?
@@ -170,47 +168,51 @@ async fn listen_inbound_incomming(
                                     .public_key(public_key)?
                                     .build()?;
 
+                                log::trace!(
+                                    "[Inbound / incomming] knock packet: {:?}",
+                                    knock_packet
+                                );
                                 let packet = gateway::packet::PacketBuilder::new()?
-                                    .protocol(gateway::packet::Protocol::Knock2)?
+                                    .protocol(gateway::packet::Protocol::Knock)?
                                     .add_payload(knock_packet.as_ref())?
                                     .build()?;
 
                                 gateway::send(main_sock, &packet, &peer_public_addr).await?;
                                 log::debug!(
-                                    "[Inbound / incomming] sent knock2 request. peer_public={}",
+                                    "[Inbound / incomming] sent knock request. peer_public={}",
                                     peer_public_addr
                                 );
                             }
                             Err(e) => {
                                 log::warn!(
-                                    "[Inbound / incomming] Knock1 failed. peer_public={}, reason={}",
+                                    "[Inbound / incomming] Knock request failed. peer_public={}, reason={}",
                                     peer_public_addr_hole,
                                     e
                                 );
                             }
                         }
                     }
-                    gateway::packet::Protocol::Knock2 => {
-                        log::debug!("[Inbound / incomming] Received a knock2");
-                        match packet.to_knock2() {
-                            Ok(knock2_packet) => {
+                    gateway::packet::Protocol::Knock => {
+                        log::debug!("[Inbound / incomming] Received a knock");
+                        match packet.to_knock() {
+                            Ok(knock_packet) => {
                                 let peer_public_addr = format!(
                                     "{}:{}",
-                                    knock2_packet.public_ipv4(),
-                                    knock2_packet.public_port(),
+                                    knock_packet.public_ipv4(),
+                                    knock_packet.public_port(),
                                 )
                                 .parse::<SocketAddr>()?;
 
-                                network.lock().await.reserve_node(
-                                    &knock2_packet.private_ipv4(),
-                                    peer_public_addr,
-                                )?;
+                                let reserved_node =
+                                    network.lock().await.reserve_node(peer_public_addr)?;
+
+                                // TODO Confirm the peer node after vaidating it with the owner.
 
                                 // Start handshake
                                 let handshake_packet =
                                     gateway::packet::HandshakePacketBuilder::new()?
                                         .private_ipv4(private_ipv4.clone())?
-                                        .nonce(knock2_packet.nonce())?
+                                        .nonce(knock_packet.nonce())?
                                         .public_ipv4(external_public_ipv4.clone())?
                                         .public_port(external_public_port)?
                                         .public_key(public_key)?
@@ -222,7 +224,7 @@ async fn listen_inbound_incomming(
                                 );
                                 let mut noise = HandshakeBuilder::new(NOISE_PARAMS.clone())
                                     .local_private_key(&private_key)
-                                    .remote_public_key(&knock2_packet.public_key().as_ref())
+                                    .remote_public_key(&knock_packet.public_key().as_ref())
                                     .build_initiator()?;
 
                                 let mut buf = [0u8; 127];
@@ -237,19 +239,19 @@ async fn listen_inbound_incomming(
                                 gateway::send(main_sock, &packet, &peer_public_addr).await?;
                                 log::debug!(
                                     "[Inbound / incomming] sent handshake request. peer_private={}, peer_public={}",
-                                    knock2_packet.private_ipv4(),
+                                    knock_packet.private_ipv4(),
                                     peer_public_addr_hole
                                 );
 
                                 log::info!(
-                                    "[Inbound / incomming] Knock2 accepted: peer_private={}, peer_public={}",
-                                    knock2_packet.private_ipv4(),
+                                    "[Inbound / incomming] Knock accepted: peer_private={}, peer_public={}",
+                                    knock_packet.private_ipv4(),
                                     peer_public_addr_hole
                                 );
                             }
                             Err(e) => {
                                 log::warn!(
-                                    "[Inbound / incomming] Knock2 failed. peer_public={}, reason={}",
+                                    "[Inbound / incomming] Knock failed. peer_public={}, reason={}",
                                     peer_public_addr_hole,
                                     e
                                 );
@@ -296,28 +298,28 @@ async fn listen_inbound_incomming(
                                         if let Some(reserved_node) = network
                                             .lock()
                                             .await
-                                            .get_reserved_node(&tcpip_packet.source_ipv4())?
+
+                                            .get_reserved_node(&tcpip_packet.source_ipv4())
+                                            // TODO Ignore the error
+                                            ?
                                         {
-                                            log::debug!("[Inbound / incomming] Found peer on the network. Try knock2.");
-                                            let knock2_packet =
-                                                gateway::packet::Knock2PacketBuilder::new()?
+                                            log::debug!("[Inbound / incomming] Found peer on the network. Try knock.");
+                                            let knock_packet =
+                                                gateway::packet::KnockPacketBuilder::new()?
                                                     .private_ipv4(private_ipv4.clone())?
                                                     .nonce(reserved_node.nonce)?
                                                     .public_ipv4(external_public_ipv4.clone())?
                                                     .public_port(external_public_port)?
-                                                    .target_private_ipv4(
-                                                        tcpip_packet.source_ipv4().clone(),
-                                                    )?
                                                     .public_key(&public_key)?
                                                     .build()?;
                                             log::trace!(
                                                 "[Inbound / incomming] knock packet: {:?}",
-                                                knock2_packet
+                                                knock_packet
                                             );
 
                                             let packet = gateway::packet::PacketBuilder::new()?
-                                                .protocol(gateway::packet::Protocol::Knock2)?
-                                                .add_payload(knock2_packet.as_ref())?
+                                                .protocol(gateway::packet::Protocol::Knock)?
+                                                .add_payload(knock_packet.as_ref())?
                                                 .build()?;
 
                                             gateway::send(
@@ -455,7 +457,7 @@ async fn listen_inbound_outgoing(
                         continue;
                     }
                 };
-                
+
                 let peer_private_addr = payload_packet.destination();
                 if peer_private_addr.is_multicast() {
                     // TODO: It should be configurable whether skip or ingest. Need any concrete usecase.
@@ -478,12 +480,17 @@ async fn listen_inbound_outgoing(
                     // Received packet to a registered peer
                     Some(peer) => {
                         log::debug!("[Inbound / outgoing] Transferring the packet");
+
+                        // Wrap the raw packet
                         let packet = gateway::packet::PacketBuilder::new()?
                             .protocol(gateway::packet::Protocol::TcpIp)?
-                            .add_payload(gateway::packet::TcpIpPacketBuilder::new()?
-                            .source_ipv4(private_ipv4.clone())?
-                            .add_payload(payload_packet.as_ref())?
-                            .build()?.as_ref())?
+                            .add_payload(
+                                gateway::packet::TcpIpPacketBuilder::new()?
+                                    .source_ipv4(private_ipv4.clone())?
+                                    .add_payload(payload_packet.as_ref())?
+                                    .build()?
+                                    .as_ref(),
+                            )?
                             .build()?;
 
                         match gateway::send(main_sock, &packet, &peer.public_addr).await {
@@ -502,18 +509,23 @@ async fn listen_inbound_outgoing(
                             }
                         }
                     }
-                    // Received packet to an unknown peer
+                    // In the case of an unknown peer, search for the public address using the target's private address.
                     None => {
                         let network = network.lock().await;
                         let peer_node = match network.get(&peer_private_addr)? {
+                            // The peer is found in the private network
                             Some(v) => v,
+
+                            // Not found in the private network.
+                            // Someone in the network may know the peer's public address. Try to find it.
                             None => {
                                 log::debug!(
-                                    "[Inbound / outgoing] The peer({}) not found. Try knock2 via a connected peer if any. Number of connected peers: {}. If any peer cannot reach the target peer, manually knock2 to the peer.",
+                                    "[Inbound / outgoing] The target peer({}) not found in the local cache. Send query request to the connected {} peer(s).",
                                     peer_private_addr, peers_cache.len()
                                 );
-                                // TODO: Query the peer's info to other peers and knock to the peer.
-                                let knock2_packet = gateway::packet::Knock2PacketBuilder::new()?
+                                // TODO tests
+                                // Query the peer's info to other peers and knock to the peer.
+                                let query_packet = gateway::packet::QueryPacketBuilder::new()?
                                     .private_ipv4(private_ipv4.clone())?
                                     .public_ipv4(external_public_ipv4.clone())?
                                     .public_port(external_public_port)?
@@ -524,13 +536,13 @@ async fn listen_inbound_outgoing(
                                 // Multicast the knock request.
                                 for (_, peer) in peers_cache.iter() {
                                     let packet = gateway::packet::PacketBuilder::new()?
-                                        .protocol(gateway::packet::Protocol::Knock2)?
-                                        .add_payload(knock2_packet.as_ref())?
+                                        .protocol(gateway::packet::Protocol::Query)?
+                                        .add_payload(query_packet.as_ref())?
                                         .build()?;
 
                                     log::trace!(
-                                        "[Inbound / outgoing] knock2 packet: {:?}",
-                                        knock2_packet
+                                        "[Inbound / outgoing] query packet: {:?}",
+                                        query_packet
                                     );
                                     gateway::send(&main_sock, &packet, &peer.public_addr).await?;
                                 }

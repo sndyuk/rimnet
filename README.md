@@ -42,10 +42,10 @@ The Secure peer-to-peer overlay TCP/IP network.
 
     ```sh
     # Inside a container
-    # e.g. 
+    # e.g.
     # $ docker run --privileged -it --rm -v `pwd`/.:/usr/src/app -p 7991:7891 rust:1.63
     # > cd /usr/src/app
-    # > cargo build -p agent --release && target/release/agent --private-ipv4 10.0.0.4 --public-ipv4 172.17.0.2 --external-public-ipv4 192.168.1.5 --external-public-port 7991
+    # > cargo build -p agent --release && target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 172.17.0.2 --external-public-ipv4 192.168.1.5 --external-public-port 7991
     $ cargo build -p agent --release && target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the container> --external-public-ipv4 <public IPv4 address of the host machine> --external-public-port <public port of the host machine>
     public key: <KEY_2>
     listening on 10.0.254.1:7891
@@ -61,6 +61,14 @@ The Secure peer-to-peer overlay TCP/IP network.
     ```sh
     $ cargo build -p cli --release && target/release/cli knock --ipv4 <public IPv4 address of the machine> --target-private-ipv4 <private IPv4 address of the target agent> --target-public-ipv4 <public IPv4 address of the target host machine>
     ```
+
+### Validation the environment
+4. Run a stub server on the machine 1
+
+    ```sh
+    $ nc -l 10.0.0.4 8080
+    ```
+
 
 
 ### Development (Linux only)
@@ -100,7 +108,7 @@ $ sudo ip netns exec rimnet_1 nc -l 10.0.0.3 8080
 ```
 
 #### Example 1. Confirm running the agent
-The peer client will show the log "The peer(10.0.0.1) not found".
+The peer client will show the log "The target peer(10.0.0.1) not found".
 
 ```sh
 $ sudo ip netns exec rimnet_1 nc -u 10.0.0.1 7891
@@ -113,12 +121,12 @@ The peer client will show a handshake ok log.
 
 From the same network
 ```sh
-$ sudo ip netns exec rimnet_1 su - `whoami` -c "cd `pwd` && cargo run --example inbound_incomming -- --key <KEY_1> -p 7891"
+$ sudo ip netns exec rimnet_1 su - `whoami` -c "cd `pwd` && cargo run --example emulate_handshake"
 ```
 
 From the host machine
 ```sh
-$ cargo run --example inbound_incomming -- --key <KEY_1> --host-ipv4 10.0.254.254 -p 7891
+$ cargo run --example emulate_handshake -- --host-ipv4 10.0.254.254
 ```
 
 
@@ -134,12 +142,12 @@ The node is going to run on the new sandbox network `rimnet_2`.
 2. Knock to the peer node from the new node.
     It will only accept the incomming request from the peer node(10.0.0.4) to the source node(10.0.0.3).
     ```sh
-    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock --ipv4 10.0.254.2 --target-private-ipv4 10.0.0.4 --target-public-ipv4 10.0.254.2
+    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock-request --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2
     ```
 
     Opposite as well.
     ```sh
-    $ cargo build -p cli && sudo ip netns exec rimnet_2 target/debug/cli knock --ipv4 10.0.254.3 --target-private-ipv4 10.0.0.3 --target-public-ipv4 10.0.254.1
+    $ cargo build -p cli && sudo ip netns exec rimnet_2 target/debug/cli knock-request --public-ipv4 10.0.254.2 --target-public-ipv4 10.0.254.1
     ```
 
 3. Send a ping packet.

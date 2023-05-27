@@ -1,12 +1,16 @@
 use anyhow::Result;
 use snow::HandshakeState;
 use std::fmt;
+use tracing as log;
 
-pub mod knock1;
-pub use knock1::*;
+pub mod knock_request;
+pub use knock_request::*;
 
-pub mod knock2;
-pub use knock2::*;
+pub mod knock;
+pub use knock::*;
+
+pub mod query;
+pub use query::*;
 
 pub mod handshake;
 pub use handshake::*;
@@ -22,9 +26,11 @@ pub enum Protocol {
     // ↓ Not signed
 
     // Execute knock.
-    Knock1 = 0b0_0001,
+    KnockRequest = 0b0_0001,
     // Actual knock. It triggers handshake process.
-    Knock2 = 0b0_0010,
+    Knock = 0b0_0010,
+    // Query an unknown peer node.
+    Query = 0b0_0011,
 
     // ↓ Signed
 
@@ -38,8 +44,8 @@ pub enum Protocol {
 impl From<u8> for Protocol {
     fn from(v: u8) -> Self {
         match v {
-            0b0_0001 => Protocol::Knock1,
-            0b0_0010 => Protocol::Knock2,
+            0b0_0001 => Protocol::KnockRequest,
+            0b0_0010 => Protocol::Knock,
             0b1_0001 => Protocol::Handshake,
             0b1_0010 => Protocol::TcpIp,
             _ => Protocol::Unknown,
@@ -47,7 +53,7 @@ impl From<u8> for Protocol {
     }
 }
 
-/* 
+/*
 Protocol format:
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -122,16 +128,18 @@ impl<B: AsRef<[u8]>> Packet<B> {
         self.protocol() != Protocol::Unknown
     }
 
-    pub fn to_knock1(&mut self) -> Result<Knock1<impl AsRef<[u8]>>> {
-        assert!(self.protocol() == Protocol::Knock1);
-        let knock1 = Knock1::unchecked(self.payload());
-        Ok(knock1)
+    pub fn to_knock_request(&mut self) -> Result<KnockRequest<impl AsRef<[u8]>>> {
+        assert!(self.protocol() == Protocol::KnockRequest);
+        let knock_request = KnockRequest::unchecked(self.payload());
+        log::trace!("knock_request: {:?}", knock_request);
+        Ok(knock_request)
     }
 
-    pub fn to_knock2(&mut self) -> Result<Knock2<impl AsRef<[u8]>>> {
-        assert!(self.protocol() == Protocol::Knock2);
-        let knock2 = Knock2::unchecked(self.payload());
-        Ok(knock2)
+    pub fn to_knock(&mut self) -> Result<Knock<impl AsRef<[u8]>>> {
+        assert!(self.protocol() == Protocol::Knock);
+        let knock = Knock::unchecked(self.payload());
+        log::trace!("knock: {:?}", knock);
+        Ok(knock)
     }
 
     pub fn to_handshake(&mut self, hs: &mut HandshakeState) -> Result<Handshake<impl AsRef<[u8]>>> {
@@ -140,6 +148,7 @@ impl<B: AsRef<[u8]>> Packet<B> {
         let new_len = hs.read_message(self.payload().as_ref(), &mut buf)?;
         assert!(new_len <= 127);
         let handshake = Handshake::unchecked(buf[..new_len].to_vec());
+        log::trace!("handshake: {:?}", handshake);
         Ok(handshake)
     }
 
@@ -147,6 +156,7 @@ impl<B: AsRef<[u8]>> Packet<B> {
         assert!(self.protocol() == Protocol::TcpIp);
         let payload = self.payload();
         let tcpip = TcpIp::unchecked(payload.as_ref().len() as u16, payload);
+        log::trace!("tcpip: {:?}", tcpip);
         Ok(tcpip)
     }
 }

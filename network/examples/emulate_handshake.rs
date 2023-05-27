@@ -1,47 +1,34 @@
 extern crate base64;
 extern crate tun;
 
-use lazy_static::lazy_static;
-
 use anyhow::*;
 use clap::Parser;
 use lib::gateway::{self, packet::Protocol};
 use packet::{self, Builder as packet_builder, Packet as _};
-use snow::{params::NoiseParams, Builder};
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::net::UdpSocket;
-
-lazy_static! {
-    // TODO Be customizable
-    pub static ref NOISE_PARAMS: NoiseParams = "Noise_N_25519_ChaChaPoly_BLAKE2s".parse().unwrap();
-}
 
 #[derive(Parser)]
 #[clap()]
 struct Opts {
-    #[clap(short, long)]
-    key: String,
     #[clap(long, default_value = "127.0.0.1")]
     host_ipv4: String,
     #[clap(long, default_value = "10.0.254.1")]
-    target_public_ipv4: String,
+    public_ipv4: String,
     #[clap(short, long, default_value = "7891")]
-    port: u16,
+    public_port: u16,
+    #[clap(long, default_value = "10.0.0.2")]
+    target_private_ipv4: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
-    let remote_public_key = opts.key;
-    let host_ipv4 = opts.host_ipv4;
-    let target_public_ipv4 = opts.target_public_ipv4;
-    let port = opts.port;
-    println!("public key: {:?}", remote_public_key);
     send_sample_messages(
-        &base64::decode(remote_public_key)?,
-        &host_ipv4,
-        &target_public_ipv4,
-        port,
+        &opts.host_ipv4,
+        &opts.public_ipv4,
+        opts.public_port,
+        &opts.target_private_ipv4,
     )
     .await?;
     println!("all done.");
@@ -49,48 +36,16 @@ async fn main() -> Result<()> {
 }
 
 async fn send_sample_messages(
-    remote_public_key: &Vec<u8>,
     host_ipv4: &str,
-    target_public_ipv4: &str,
-    port: u16,
+    public_ipv4: &str,
+    public_port: u16,
+    target_private_ipv4: &str,
 ) -> Result<()> {
-    let mut buf = vec![0u8; 65535];
-
-    let builder: Builder<'_> = Builder::new(NOISE_PARAMS.clone());
-    let local_keypair = builder.generate_keypair()?;
-    let mut noise = builder
-        .local_private_key(&local_keypair.private)
-        .remote_public_key(remote_public_key)
-        .build_initiator()?;
-
-    // Connect to the remote client
+    // Connect to the remote node
     let mut sock = UdpSocket::bind(format!("{}:0", host_ipv4)).await?;
     println!("binded to the local address {}", sock.local_addr()?);
-    let server_addr = format!("{}:{}", target_public_ipv4, port).parse::<SocketAddr>()?;
+    let server_addr = format!("{}:{}", public_ipv4, public_port).parse::<SocketAddr>()?;
     println!("connecting to {} ...", server_addr);
-
-    // Start handshake
-    let handshake_packet = gateway::packet::HandshakePacketBuilder::new()?
-        .private_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
-        .public_ipv4(target_public_ipv4.parse::<Ipv4Addr>()?)?
-        .public_key(local_keypair.public)?
-        .build()?;
-    println!("handshake packet: {:?}", handshake_packet);
-
-    let handshake_len = noise.write_message(handshake_packet.as_ref(), &mut buf)?;
-    println!("encrypted handshake packet length: {:?}", handshake_len);
-
-    let packet = gateway::packet::PacketBuilder::new()?
-        .protocol(Protocol::Handshake)?
-        .add_payload(&buf[..handshake_len])?
-        .build()?;
-
-    println!("packet: {:?}", packet);
-
-    gateway::send(&mut sock, &packet, &server_addr).await?;
-
-    let mut noise = noise.into_transport_mode()?;
-    println!("session should be established");
 
     // Send data
     for _ in 0..1 {
@@ -100,8 +55,8 @@ async fn send_sample_messages(
                 .id(44616)?
                 // .flags(packet::ip::v4::Flags::MORE_FRAGMENTS)?
                 .ttl(64)?
-                .source(Ipv4Addr::new(10, 0, 0, 2))?
-                .destination(Ipv4Addr::new(10, 0, 0, 3))?
+                .source(Ipv4Addr::new(10, 0, 0, 3))?
+                .destination(Ipv4Addr::new(10, 0, 0, 4))?
                 .udp()?
                 .source(8080)?
                 .destination(8080)?
@@ -129,7 +84,7 @@ async fn send_sample_messages(
         ];
 
         let tcpip_packet = gateway::packet::TcpIpPacketBuilder::new()?
-            .source_ipv4(Ipv4Addr::new(10, 0, 0, 2))?
+            .source_ipv4(Ipv4Addr::new(10, 0, 0, 4))?
             .capability(capability.to_vec())?
             .add_payload(sample_ipv4_packet.as_ref())?
             .build()?;
