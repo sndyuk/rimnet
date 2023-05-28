@@ -26,7 +26,7 @@ struct Opts {
     #[clap(short, long)]
     mtu: Option<i32>,
     #[clap(short, long)]
-    cert_path: Option<String>,
+    client_cert: Option<String>,
     #[clap(short, long)]
     verbose: bool,
 }
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
             tracing_subscriber::filter::EnvFilter::try_from_env("RIMNET_LOG").unwrap_or_else(
                 |_| {
                     tracing_subscriber::filter::EnvFilter::new(if opts.verbose {
-                        "TRACE,sled=DEBUG"
+                        "TRACE,sled=INFO,tokio_util=DEBUG"
                     } else {
                         "INFO"
                     })
@@ -51,8 +51,8 @@ async fn main() -> Result<()> {
         .init();
 
     // Prepare keypair of the agent
-    let keypair = if let Some(ref cert_path) = opts.cert_path {
-        Keypair::load(cert_path)?
+    let keypair = if let Some(ref client_cert) = opts.client_cert {
+        Keypair::load(client_cert)?
     } else {
         let keypair = generate_keypair()?;
         keypair

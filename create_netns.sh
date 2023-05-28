@@ -50,4 +50,3 @@ then
 fi
 
 firewall-cmd --add-port=7891/udp
-

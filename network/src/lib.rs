@@ -5,6 +5,7 @@ use snow::Builder as SnowBuilder;
 mod device;
 mod inbound;
 mod state;
+use base64;
 use regex::Regex;
 use std::fs;
 

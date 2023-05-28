@@ -5,6 +5,7 @@ use sled;
 use snow::TransportState;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing as log;
 
 pub struct Network {
     db: sled::Db,
@@ -24,11 +25,12 @@ pub struct ReservedNode {
     pub nonce: u16,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Node {
     pub public_addr: SocketAddr,
     pub public_addr_hole: SocketAddr,
     pub public_key: Vec<u8>,
+    pub nonce: u16,
 }
 
 impl Network {
@@ -36,26 +38,16 @@ impl Network {
         Network::deserialize(&self.db.get(private_addr.to_string())?)
     }
 
-    pub fn get_reserved_node(&self, private_addr: &Ipv4Addr) -> Result<Option<ReservedNode>> {
-        Network::deserialize(
-            &self
-                .db
-                .get(format!("{}-reserved", private_addr.to_string()))?,
-        )
-    }
-
-    pub fn reserve_node(
-        &mut self,
-        private_addr: &Ipv4Addr,
-        public_addr: SocketAddr,
-    ) -> Result<ReservedNode> {
+    pub fn reserve_node(&mut self, public_addr: SocketAddr) -> Result<ReservedNode> {
+        log::debug!("[state] reserve_node: {}", public_addr);
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.subsec_nanos() as u16;
         let node = ReservedNode { public_addr, nonce };
         let v = serde_yaml::to_string(&node)?;
         self.db.insert(
-            format!("{}-reserved", private_addr.to_string()),
+            format!("{}-reserved", public_addr.to_string()),
             v.as_bytes(),
         )?;
+        // Don't need to flush the db. Flush it after confirming the node.
         Ok(node)
     }
 
@@ -69,13 +61,14 @@ impl Network {
     ) -> Result<Option<Node>> {
         let a: ReservedNode = if let Some(reserved) = self
             .db
-            .get(format!("{}-reserved", private_addr.to_string()))?
+            // Do not remove the reserved node information for reconnection.
+            .get(format!("{}-reserved", public_addr.to_string()))?
         {
             serde_yaml::from_slice(reserved.as_ref())?
         } else {
             return Err(anyhow!(format!(
                 "Invalid state: the node({}) is not reserved.",
-                private_addr
+                public_addr
             )));
         };
         if a.nonce != nonce {
@@ -86,6 +79,7 @@ impl Network {
             public_addr,
             public_addr_hole,
             public_key: public_key.as_ref().to_vec(),
+            nonce: a.nonce,
         })?;
 
         let old_value = self.db.insert(private_addr.to_string(), v.as_bytes())?;

@@ -10,19 +10,17 @@ struct Opts {
 #[derive(Parser, Debug)]
 enum Command {
     #[clap(version = "1.0")]
-    Knock(KnockOpts),
+    KnockRequest(KnockRequestOpts),
     #[clap(version = "1.0")]
     Cert(CertOpts),
 }
 
 #[derive(Parser, Debug)]
-struct KnockOpts {
+struct KnockRequestOpts {
     #[clap(long, default_value = "0.0.0.0")]
-    ipv4: String,
+    public_ipv4: String,
     #[clap(short, long, default_value = "7891")]
-    port: u16,
-    #[clap(long)]
-    target_private_ipv4: String,
+    public_port: u16,
     #[clap(long)]
     target_public_ipv4: String,
     #[clap(short, long, default_value = "7891")]
@@ -39,11 +37,10 @@ struct CertOpts {
 async fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
     match opts.command {
-        Command::Knock(args) => {
-            knock(
-                &args.ipv4,
-                args.port,
-                &args.target_private_ipv4,
+        Command::KnockRequest(args) => {
+            knock_request(
+                &args.public_ipv4,
+                args.public_port,
                 &args.target_public_ipv4,
                 args.target_public_port,
             )
@@ -56,10 +53,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn knock(
+async fn knock_request(
     ipv4: &str,
     port: u16,
-    target_private_ipv4: &str,
     target_external_public_ipv4: &str,
     target_external_public_port: u16,
 ) -> Result<()> {
@@ -73,20 +69,22 @@ async fn knock(
     let mut sock = UdpSocket::bind(format!("{}:0", ipv4)).await?;
     println!("connecting to {} ...", my_addr);
 
-    // Knock knock
-    let knock1_packet = gateway::packet::Knock1PacketBuilder::new()?
-        .private_ipv4(target_private_ipv4.parse::<Ipv4Addr>()?)?
+    // Send the knock request
+    let knock_request_packet = gateway::packet::KnockRequestPacketBuilder::new()?
         .public_ipv4(target_external_public_ipv4.parse::<Ipv4Addr>()?)?
         .public_port(target_external_public_port)?
         .build()?;
 
     let packet = gateway::packet::PacketBuilder::new()?
-        .protocol(Protocol::Knock1)?
-        .add_payload(knock1_packet.as_ref())?
+        .protocol(Protocol::KnockRequest)?
+        .add_payload(knock_request_packet.as_ref())?
         .build()?;
 
     gateway::send(&mut sock, &packet, &my_addr).await?;
-    println!("Sent knock1 packet: {:?} to {}", knock1_packet, my_addr);
+    println!(
+        "Sent knock packet: {:?} to {}",
+        knock_request_packet, my_addr
+    );
     Ok(())
 }
 
