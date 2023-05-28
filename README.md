@@ -32,14 +32,14 @@ The Secure peer-to-peer overlay TCP/IP network.
 1. Issue client cert
 
     ```sh
-    $ cargo build -p agent --release && target/release/cli cert -n agent1
+    $ cargo build -p cli --release && target/release/cli cert -n agent1
     ```
 
 2. Run the agent.
 2-a. Run the agent on a host machine
 
     ```sh
-    $ cargo build -p agent --release && sudo target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the machine> --cert agent1
+    $ cargo build -p agent --release && sudo target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the machine> --client-cert agent1
     public key: <KEY_1>
     listening on 10.0.254.1:7891
     ```
@@ -61,7 +61,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 1. Issue client cert
 
     ```sh
-    $ cargo build -p agent --release && target/release/cli cert -n agent2
+    $ cargo build -p cli --release && target/release/cli cert -n agent2
     ```
 
 2. Run the peer agent on a different machine.
@@ -71,7 +71,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 3. Knock to the peer agent from the new node.
 
     ```sh
-    $ cargo build -p cli --release && target/release/cli knock --ipv4 <public IPv4 address of the machine> --target-private-ipv4 <private IPv4 address of the target agent> --target-public-ipv4 <public IPv4 address of the target host machine>
+    $ cargo build -p cli --release && target/release/cli knock-request --public-ipv4 <public IPv4 address of the machine> --target-public-ipv4 <public IPv4 address of the target host machine>
     ```
 
 ### Validation the environment
@@ -193,20 +193,43 @@ $ cargo run --example emulate_inbound_trafic -- --host-ipv4 10.0.254.254
 
 ---
 ## Performance
-Download sample file(235M) via the netowork.
-
-* Barebone (Host machine -> Docker container)
-    ```
-      % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                    Dload  Upload   Total   Spent    Left  Speed
-    100  235M  100  235M    0     0  1019M      0 --:--:-- --:--:-- --:--:-- 1019M
-    ```
-
 * w/ Rimnet (agent A -> agent B on the same machine)
-
-    4%
+    Agent A
     ```
-      % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                    Dload  Upload   Total   Spent    Left  Speed
-    100  235M  100  235M    0     0  41.3M      0  0:00:05  0:00:05 --:--:-- 42.4M
+    $ sudo ip netns exec rimnet_2 iperf -s
+    ```
+
+    1) with `--mtu 1500` option
+    Agent B
+    ```
+    $ sudo ip netns exec rimnet_1 iperf -c 10.0.0.4
+    [  1] local 10.0.0.3 port 59960 connected with 10.0.0.4 port 5001
+    [ ID] Interval       Transfer     Bandwidth
+    [  1] 0.00-10.09 sec   374 MBytes   311 Mbits/sec
+    ```
+
+    2) with `--mtu 60000` option
+    Agent B
+    ```
+    $ sudo ip netns exec rimnet_1 iperf -c 10.0.0.4
+    [  1] local 10.0.0.3 port 59960 connected with 10.0.0.4 port 5001
+    [ ID] Interval       Transfer     Bandwidth
+    [  1] 0.00-10.02 sec  3.28 GBytes  2.81 Gbits/sec
+    ```
+
+* w/o Rimnet (Host machine -> Docker container on the same machine)
+    ```
+    [  1] local 172.17.0.2 port 50001 connected with 172.17.0.1 port 49394
+    [ ID] Interval       Transfer     Bandwidth
+    [  1] 0.0000-10.0005 sec  32.4 GBytes  27.8 Gbits/sec
+    ```
+
+* w/o Rimnet (Host machine -> Machine B on the same local network)
+    `mtu 1500`
+
+    ```
+    $ sudo ip netns exec rimnet_1 iperf -c 10.0.0.4
+    [  1] local 10.0.0.3 port 59960 connected with 10.0.0.4 port 5001
+    [ ID] Interval       Transfer     Bandwidth
+    [  1] 0.00-10.03 sec  46.3 MBytes  38.7 Mbits/sec
     ```
