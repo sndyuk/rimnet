@@ -29,11 +29,17 @@ The Secure peer-to-peer overlay TCP/IP network.
 ## Usage
 
 ### Machine 1
-1. Run the agent.
-1-a. Run the agent on a host machine
+1. Issue client cert
 
     ```sh
-    $ cargo build -p agent --release && sudo target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the machine>
+    $ cargo build -p agent --release && target/release/cli cert -n agent1
+    ```
+
+2. Run the agent.
+2-a. Run the agent on a host machine
+
+    ```sh
+    $ cargo build -p agent --release && sudo target/release/agent --private-ipv4 10.0.0.3 --public-ipv4 <public IPv4 address of the machine> --cert agent1
     public key: <KEY_1>
     listening on 10.0.254.1:7891
     ```
@@ -52,6 +58,12 @@ The Secure peer-to-peer overlay TCP/IP network.
     ```
 
 ### Machine 2
+1. Issue client cert
+
+    ```sh
+    $ cargo build -p agent --release && target/release/cli cert -n agent2
+    ```
+
 2. Run the peer agent on a different machine.
 
     Same as #1 but use `--private-ipv4 10.0.0.4`.
@@ -83,7 +95,7 @@ $ ./clean_netns.sh
 
 #### Run the sample agent on the sandbox namespace
 ```sh
-$ cargo build -p agent && sudo ip netns exec rimnet_1 sudo RUST_BACKTRACE=full target/debug/agent -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1
+$ cargo build -p agent && sudo ip netns exec rimnet_1 sudo RUST_BACKTRACE=full target/debug/agent -v -n test-dev --private-ipv4 10.0.0.3 --public-ipv4 10.0.254.1 --client-cert agent1
 public key: <KEY_1>
 listening on 10.0.254.1:7891
 ```
@@ -116,27 +128,13 @@ Test!<Enter>
 <Enter>
 ```
 
-#### Example 2. Manually emulate an inbound trafic
-The peer client will show a handshake ok log.
-
-From the same network
-```sh
-$ sudo ip netns exec rimnet_1 su - `whoami` -c "cd `pwd` && cargo run --example emulate_handshake"
-```
-
-From the host machine
-```sh
-$ cargo run --example emulate_handshake -- --host-ipv4 10.0.254.254
-```
-
-
-#### Example 3. Send ping packet using the private network
+#### Example 2. Send ping packet using the private network
 
 1. Run a peer node
 The node is going to run on the new sandbox network `rimnet_2`.
 
     ```sh
-    $ cargo build -p agent && sudo ip netns exec rimnet_2 sudo RUST_BACKTRACE=full target/debug/agent -v -n test-dev --private-ipv4 10.0.0.4 --public-ipv4 10.0.254.2
+    $ cargo build -p agent && sudo ip netns exec rimnet_2 sudo RUST_BACKTRACE=full target/debug/agent -v -n test-dev --private-ipv4 10.0.0.4 --public-ipv4 10.0.254.2 --client-cert agent2
     ```
 
 2. Knock to the peer node from the new node.
@@ -148,6 +146,8 @@ The node is going to run on the new sandbox network `rimnet_2`.
     Opposite as well.
     ```sh
     $ cargo build -p cli && sudo ip netns exec rimnet_2 target/debug/cli knock-request --public-ipv4 10.0.254.2 --target-public-ipv4 10.0.254.1
+    ...
+    [Inbound / incomming] Session established
     ```
 
 3. Send a ping packet.
@@ -177,3 +177,15 @@ The node is going to run on the new sandbox network `rimnet_2`.
     Accept: */*
     ```
 
+#### Example 3. Manually emulate an inbound trafic
+The peer client will show a handshake ok log.
+
+From the same network
+```sh
+$ sudo ip netns exec rimnet_1 su - `whoami` -c "cd `pwd` && cargo run --example emulate_inbound_trafic"
+```
+
+From the host machine
+```sh
+$ cargo run --example emulate_inbound_trafic -- --host-ipv4 10.0.254.254
+```
