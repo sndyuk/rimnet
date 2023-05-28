@@ -189,3 +189,24 @@ From the host machine
 ```sh
 $ cargo run --example emulate_inbound_trafic -- --host-ipv4 10.0.254.254
 ```
+
+
+---
+## Performance
+Download sample file(235M) via the netowork.
+
+* Barebone (Host machine -> Docker container)
+    ```
+      % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                    Dload  Upload   Total   Spent    Left  Speed
+    100  235M  100  235M    0     0  1019M      0 --:--:-- --:--:-- --:--:-- 1019M
+    ```
+
+* w/ Rimnet (agent A -> agent B on the same machine)
+
+    4%
+    ```
+      % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                    Dload  Upload   Total   Spent    Left  Speed
+    100  235M  100  235M    0     0  41.3M      0  0:00:05  0:00:05 --:--:-- 42.4M
+    ```
