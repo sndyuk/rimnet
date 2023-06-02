@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::net::Ipv4Addr;
 
+#[derive(Debug, Clone)]
 pub struct NetworkConfig {
     pub name: String,
     pub mtu: i32,
