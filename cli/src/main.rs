@@ -22,6 +22,8 @@ struct KnockRequestOpts {
     #[clap(short, long, default_value = "7891")]
     public_port: u16,
     #[clap(long)]
+    target_private_ipv4: String,
+    #[clap(long)]
     target_public_ipv4: String,
     #[clap(short, long, default_value = "7891")]
     target_public_port: u16,
@@ -41,6 +43,7 @@ async fn main() -> Result<()> {
             knock_request(
                 &args.public_ipv4,
                 args.public_port,
+                &args.target_private_ipv4,
                 &args.target_public_ipv4,
                 args.target_public_port,
             )
@@ -56,6 +59,7 @@ async fn main() -> Result<()> {
 async fn knock_request(
     ipv4: &str,
     port: u16,
+    target_private_ipv4: &str,
     target_external_public_ipv4: &str,
     target_external_public_port: u16,
 ) -> Result<()> {
@@ -71,6 +75,7 @@ async fn knock_request(
 
     // Send the knock request
     let knock_request_packet = gateway::packet::KnockRequestPacketBuilder::new()?
+        .private_ipv4(target_private_ipv4.parse::<Ipv4Addr>()?)?
         .public_ipv4(target_external_public_ipv4.parse::<Ipv4Addr>()?)?
         .public_port(target_external_public_port)?
         .build()?;

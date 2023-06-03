@@ -21,7 +21,7 @@ impl Network {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReservedNode {
-    pub public_addr: SocketAddr,
+    pub private_addr: Ipv4Addr,
     pub nonce: u16,
 }
 
@@ -38,13 +38,16 @@ impl Network {
         Network::deserialize(&self.db.get(private_addr.to_string())?)
     }
 
-    pub fn reserve_node(&mut self, public_addr: SocketAddr) -> Result<ReservedNode> {
-        log::debug!("[state] reserve_node: {}", public_addr);
+    pub fn reserve_node(&mut self, private_addr: Ipv4Addr) -> Result<ReservedNode> {
+        log::debug!("[state] reserve_node: {}", private_addr);
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.subsec_nanos() as u16;
-        let node = ReservedNode { public_addr, nonce };
+        let node = ReservedNode {
+            private_addr,
+            nonce,
+        };
         let v = serde_yaml::to_string(&node)?;
         self.db.insert(
-            format!("{}-reserved", public_addr.to_string()),
+            format!("{}-reserved", private_addr.to_string()),
             v.as_bytes(),
         )?;
         // Don't need to flush the db. Flush it after confirming the node.
@@ -62,7 +65,7 @@ impl Network {
         let a: ReservedNode = if let Some(reserved) = self
             .db
             // Do not remove the reserved node information for reconnection.
-            .get(format!("{}-reserved", public_addr.to_string()))?
+            .get(format!("{}-reserved", private_addr.to_string()))?
         {
             serde_yaml::from_slice(reserved.as_ref())?
         } else {
