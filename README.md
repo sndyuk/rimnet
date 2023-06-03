@@ -6,7 +6,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 #### Features
 - Machine:
   - [x] Linux
-  - [ ] MacOS
+  - [x] MacOS
 - [x] Connect the peer agents using Noise protocol.
 - [ ] NAT hole punching.
 - CLI:
@@ -199,7 +199,8 @@ $ cargo run --example emulate_inbound_trafic -- --host-ipv4 10.0.254.254
 
 ---
 ## Performance
-* w/ Rimnet (agent A -> agent B on the same machine)
+### Case 1: agent A -> agent B on the same machine
+* w/ Rimnet
     Agent A
     ```
     $ sudo ip netns exec rimnet_2 iperf -s
@@ -230,12 +231,23 @@ $ cargo run --example emulate_inbound_trafic -- --host-ipv4 10.0.254.254
     [  1] 0.0000-10.0005 sec  32.4 GBytes  27.8 Gbits/sec
     ```
 
-* w/o Rimnet (Host machine -> Machine B on the same local network)
+
+### Case2: Host machine -> Machine B on the same local network
+
+* w/ Rimnet
+    ```
+    $ iperf -c 10.0.0.5 -m
+    [  1] local 10.0.0.3 port 56932 connected with 10.0.0.5 port 5001 (MSS=1328)
+    [ ID] Interval       Transfer     Bandwidth
+    [  1] 0.00-10.38 sec  18.0 MBytes  14.6 Mbits/sec
+    ```
+
+* w/o Rimnet
     `mtu 1500`
 
     ```
-    $ sudo ip netns exec rimnet_1 iperf -c 10.0.0.4
-    [  1] local 10.0.0.3 port 59960 connected with 10.0.0.4 port 5001
+    $ iperf -c 192.168.1.3 -m
+    [  1] local 192.168.1.9 port 58936 connected with 192.168.1.3 port 5001 (MSS=1448)
     [ ID] Interval       Transfer     Bandwidth
-    [  1] 0.00-10.03 sec  46.3 MBytes  38.7 Mbits/sec
+    [  1] 0.00-10.36 sec  20.0 MBytes  16.2 Mbits/sec
     ```
