@@ -18,7 +18,10 @@ fn create(
     let mut device_name = name;
     #[cfg(target_os = "macos")]
     {
-        log::info!("MacOS detected, using \"utunN\" instead of the specified device name \"{}\"", device_name);
+        log::info!(
+            "MacOS detected, using \"utunN\" instead of the specified device name \"{}\"",
+            device_name
+        );
         device_name = &mut "utun0";
     }
 
@@ -32,7 +35,7 @@ fn create(
     #[cfg(target_os = "linux")]
     {
         tun.platform(|p| {
-            p.packet_information(false);
+            p.packet_information(true);
         });
     }
     tun.up();
@@ -60,7 +63,7 @@ impl NetworkDevice<FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>> {
         mtu: i32,
     ) -> Result<NetworkDevice<FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>>> {
         let (reader, writer) = create(name, private_ipv4, mtu)?;
-        let codec = TunPacketCodec::new(false, mtu);
+        let codec = TunPacketCodec::new(true, mtu);
         let framed_reader = FramedRead::new(reader, codec);
         Ok(NetworkDevice {
             reader: framed_reader,

@@ -254,7 +254,17 @@ async fn listen_inbound_incomming(
                                         );
                                         // Afer the handshake
                                         tun_writer
-                                            .write_all(tcpip_packet.payload().as_ref())
+                                            .write_all(
+                                                &[
+                                                    // Add IPv4 packet information
+                                                    #[cfg(target_os = "linux")]
+                                                    &[0x00, 0x00, 0x08, 0x00], // libc::ETH_P_IP
+                                                    #[cfg(target_os = "macos")]
+                                                    &[0x00, 0x00, 0x08, 0x02], // libc::PF_INET
+                                                    tcpip_packet.payload().as_ref(),
+                                                ]
+                                                .concat(),
+                                            )
                                             .await?;
                                     }
                                     None => {

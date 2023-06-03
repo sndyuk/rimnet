@@ -25,6 +25,7 @@ pub struct TcpIp<B> {
 impl<B: AsRef<[u8]>> fmt::Debug for TcpIp<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("rimnet::packet::TcpIp")
+            .field("len", &self.total_len)
             .field("source_ipv4", &self.source_ipv4())
             .field(
                 "capability",
@@ -35,15 +36,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for TcpIp<B> {
                     .map(|n| format!("{:02X}", n))
                     .collect::<String>(),
             )
-            .field(
-                "payload",
-                &self
-                    .payload()
-                    .as_ref()
-                    .iter()
-                    .map(|n| format!("{:02X}", n))
-                    .collect::<String>(),
-            )
+            .field("payload", &self.payload().as_ref())
             .finish()
     }
 }

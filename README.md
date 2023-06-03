@@ -44,6 +44,12 @@ The Secure peer-to-peer overlay TCP/IP network.
     listening on 10.0.254.1:7891
     ```
 
+    If your machine is MacOS, run the command:
+    ```sh
+    $ route -n add -net 10.0.0.0/24 -interface <utunN>
+    ```
+
+
     Or you can run the agent on a linux container:
 
     ```sh
