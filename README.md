@@ -146,12 +146,12 @@ The node is going to run on the new sandbox network `rimnet_2`.
 2. Knock to the peer node from the new node.
     It will only accept the incomming request from the peer node(10.0.0.4) to the source node(10.0.0.3).
     ```sh
-    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock-request --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2
+    $ cargo build -p cli && sudo ip netns exec rimnet_1 target/debug/cli knock-request --public-ipv4 10.0.254.1 --target-public-ipv4 10.0.254.2 --target-private-ipv4 10.0.0.4
     ```
 
     Opposite as well.
     ```sh
-    $ cargo build -p cli && sudo ip netns exec rimnet_2 target/debug/cli knock-request --public-ipv4 10.0.254.2 --target-public-ipv4 10.0.254.1
+    $ cargo build -p cli && sudo ip netns exec rimnet_2 target/debug/cli knock-request --public-ipv4 10.0.254.2 --target-public-ipv4 10.0.254.1 --target-private-ipv4 10.0.0.4
     ...
     [Inbound / incomming] Session established
     ```
