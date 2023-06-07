@@ -260,7 +260,7 @@ async fn listen_inbound_incomming(
                                                     #[cfg(target_os = "linux")]
                                                     &[0x00, 0x00, 0x08, 0x00], // libc::ETH_P_IP
                                                     #[cfg(target_os = "macos")]
-                                                    &[0x00, 0x00, 0x08, 0x02], // libc::PF_INET
+                                                    &[0x00, 0x00, 0x00, 0x02], // libc::PF_INET
                                                     tcpip_packet.payload().as_ref(),
                                                 ]
                                                 .concat(),
