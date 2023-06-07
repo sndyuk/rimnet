@@ -82,6 +82,7 @@ async fn knock_request(
 
     let packet = gateway::packet::PacketBuilder::new()?
         .protocol(Protocol::KnockRequest)?
+        .source("0.0.0.0".parse::<Ipv4Addr>()?)?
         .add_payload(knock_request_packet.as_ref())?
         .build()?;
 

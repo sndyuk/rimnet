@@ -55,7 +55,7 @@ async fn send_sample_messages(
                 .id(44616)?
                 // .flags(packet::ip::v4::Flags::MORE_FRAGMENTS)?
                 .ttl(64)?
-                .source(Ipv4Addr::new(10, 0, 0, 99))?
+                .source("10.0.0.99".parse::<Ipv4Addr>()?)?
                 .destination(target_private_ipv4.parse::<Ipv4Addr>()?)?
                 .udp()?
                 .source(8080)?
@@ -84,7 +84,6 @@ async fn send_sample_messages(
         ];
 
         let tcpip_packet = gateway::packet::TcpIpPacketBuilder::new()?
-            .source_ipv4(target_private_ipv4.parse::<Ipv4Addr>()?)?
             .capability(capability.to_vec())?
             .add_payload(sample_ipv4_packet.as_ref())?
             .build()?;
@@ -95,6 +94,7 @@ async fn send_sample_messages(
 
         let packet = gateway::packet::PacketBuilder::new()?
             .protocol(Protocol::TcpIp)?
+            .source("0.0.0.0".parse::<Ipv4Addr>()?)?
             .add_payload(tcpip_packet.as_ref())?
             .build()?;
         println!("packet: {:?}", packet);

@@ -1,34 +1,34 @@
 use anyhow::*;
 use std::{fmt, net::Ipv4Addr};
 
-pub const HEADER_FIX_LEN: usize = 13;
+pub const HEADER_FIX_LEN: usize = 9;
 
 #[derive(Copy, Clone)]
-pub struct Query<B> {
+pub struct HandshakeAccept<B> {
     buffer: B,
 }
 
-impl<B: AsRef<[u8]>> fmt::Debug for Query<B> {
+impl<B: AsRef<[u8]>> fmt::Debug for HandshakeAccept<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("rimnet::packet::Query")
+        f.debug_struct("rimnet::packet::HandshakeAccept")
+            .field("header_len", &self.header_len())
             .field("nonce", &self.nonce())
             .field("public_ipv4", &self.public_ipv4())
             .field("public_port", &self.public_port())
-            .field("target_private_ipv4", &self.target_private_ipv4())
             .field("public_key", &base64::encode(&self.public_key()))
             .finish()
     }
 }
 
-impl<B: AsRef<[u8]>> AsRef<[u8]> for Query<B> {
+impl<B: AsRef<[u8]>> AsRef<[u8]> for HandshakeAccept<B> {
     fn as_ref(&self) -> &[u8] {
         &self.buffer.as_ref()
     }
 }
 
-impl<B: AsRef<[u8]>> Query<B> {
-    pub fn unchecked(buffer: B) -> Query<B> {
-        Query { buffer }
+impl<B: AsRef<[u8]>> HandshakeAccept<B> {
+    pub fn unchecked(buffer: B) -> HandshakeAccept<B> {
+        HandshakeAccept { buffer }
     }
 
     pub fn header_len(&self) -> u8 {
@@ -52,16 +52,7 @@ impl<B: AsRef<[u8]>> Query<B> {
         ((self.buffer.as_ref()[7] as u16) << 8) | (self.buffer.as_ref()[8] as u16)
     }
 
-    pub fn target_private_ipv4(&self) -> Ipv4Addr {
-        Ipv4Addr::new(
-            self.buffer.as_ref()[9],
-            self.buffer.as_ref()[10],
-            self.buffer.as_ref()[11],
-            self.buffer.as_ref()[12],
-        )
-    }
-
-    pub fn public_key(&self) -> impl AsRef<[u8]> {
+    pub fn public_key(&self) -> &[u8] {
         let header_len = self.header_len() as usize;
         let len = header_len - HEADER_FIX_LEN;
         unsafe {
@@ -72,33 +63,28 @@ impl<B: AsRef<[u8]>> Query<B> {
 }
 
 #[derive(Debug)]
-pub struct QueryPacketBuilder {
+pub struct HandshakeAcceptPacketBuilder {
     nonce: u16,
     public_ipv4: Option<Ipv4Addr>,
     public_port: u16,
     public_key: Option<Vec<u8>>,
-    target_private_ipv4: Option<Ipv4Addr>,
 }
 
-impl QueryPacketBuilder {
+impl HandshakeAcceptPacketBuilder {
     pub fn new() -> Result<Self> {
-        Ok(QueryPacketBuilder {
+        Ok(HandshakeAcceptPacketBuilder {
             nonce: 0,
             public_ipv4: None,
             public_port: 0,
             public_key: None,
-            target_private_ipv4: None,
         })
     }
 
-    pub fn build(self) -> Result<Query<Vec<u8>>> {
+    pub fn build(self) -> Result<HandshakeAccept<Vec<u8>>> {
         let public_ipv4 = self.public_ipv4.ok_or(anyhow!("public_ipv4 is rquired"))?;
         let public_key = self.public_key.ok_or(anyhow!("public_key is rquired"))?;
-        let target_private_ipv4 = self
-            .public_ipv4
-            .ok_or(anyhow!("target_private_ipv4 is rquired"))?;
         let header_len = (HEADER_FIX_LEN + public_key.len()) as u8;
-        Ok(Query::unchecked(
+        Ok(HandshakeAccept::unchecked(
             [
                 &[header_len] as &[u8],
                 &[(self.nonce >> 8) as u8, (self.nonce & 0b11111111) as u8] as &[u8],
@@ -107,7 +93,6 @@ impl QueryPacketBuilder {
                     (self.public_port >> 8) as u8,
                     (self.public_port & 0b11111111) as u8,
                 ] as &[u8],
-                &target_private_ipv4.octets(),
                 public_key.as_ref(),
             ]
             .concat(),
@@ -115,13 +100,13 @@ impl QueryPacketBuilder {
     }
 }
 
-impl Default for QueryPacketBuilder {
+impl Default for HandshakeAcceptPacketBuilder {
     fn default() -> Self {
-        QueryPacketBuilder::new().unwrap()
+        HandshakeAcceptPacketBuilder::new().unwrap()
     }
 }
 
-impl QueryPacketBuilder {
+impl HandshakeAcceptPacketBuilder {
     pub fn nonce(mut self, value: u16) -> Result<Self> {
         self.nonce = value;
 
@@ -136,12 +121,6 @@ impl QueryPacketBuilder {
 
     pub fn public_port(mut self, value: u16) -> Result<Self> {
         self.public_port = value;
-
-        Ok(self)
-    }
-
-    pub fn target_private_ipv4(mut self, value: Ipv4Addr) -> Result<Self> {
-        self.target_private_ipv4 = Some(value);
 
         Ok(self)
     }

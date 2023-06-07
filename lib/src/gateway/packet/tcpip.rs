@@ -1,7 +1,7 @@
 use anyhow::*;
-use std::{fmt, net::Ipv4Addr};
+use std::fmt;
 
-pub const HEADER_FIX_LEN: usize = 5;
+pub const HEADER_FIX_LEN: usize = 1;
 
 /*
 
@@ -25,8 +25,7 @@ pub struct TcpIp<B> {
 impl<B: AsRef<[u8]>> fmt::Debug for TcpIp<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("rimnet::packet::TcpIp")
-            .field("len", &self.total_len)
-            .field("source_ipv4", &self.source_ipv4())
+            .field("total_len", &self.total_len)
             .field(
                 "capability",
                 &self
@@ -56,15 +55,6 @@ impl<B: AsRef<[u8]>> TcpIp<B> {
         self.buffer.as_ref()[0]
     }
 
-    pub fn source_ipv4(&self) -> Ipv4Addr {
-        Ipv4Addr::new(
-            self.buffer.as_ref()[1],
-            self.buffer.as_ref()[2],
-            self.buffer.as_ref()[3],
-            self.buffer.as_ref()[4],
-        )
-    }
-
     pub fn capability(&self) -> impl AsRef<[u8]> {
         let header_len = self.header_len() as usize;
         unsafe {
@@ -85,7 +75,6 @@ impl<B: AsRef<[u8]>> TcpIp<B> {
 
 #[derive(Debug)]
 pub struct TcpIpPacketBuilder {
-    source_ipv4: Option<Ipv4Addr>,
     capability: Option<Vec<u8>>,
     payload_buffer: Vec<u8>,
 }
@@ -93,21 +82,18 @@ pub struct TcpIpPacketBuilder {
 impl TcpIpPacketBuilder {
     pub fn new() -> Result<Self> {
         Ok(TcpIpPacketBuilder {
-            source_ipv4: None,
             capability: None,
             payload_buffer: Vec::new(),
         })
     }
 
     pub fn build(self) -> Result<TcpIp<Vec<u8>>> {
-        let source_ipv4 = self.source_ipv4.ok_or(anyhow!("source_ipv4 is rquired"))?;
         let header_len = self.capability.as_ref().map(|v| v.len()).unwrap_or(0) + HEADER_FIX_LEN;
         assert!(header_len <= 127);
         Ok(TcpIp::unchecked(
             header_len as u16 + self.payload_buffer.len() as u16,
             [
                 &[header_len as u8] as &[u8],
-                &source_ipv4.octets(),
                 self.capability
                     .as_ref()
                     .map(|v| v.as_ref())
@@ -126,12 +112,6 @@ impl Default for TcpIpPacketBuilder {
 }
 
 impl TcpIpPacketBuilder {
-    pub fn source_ipv4(mut self, value: Ipv4Addr) -> Result<Self> {
-        self.source_ipv4 = Some(value);
-
-        Ok(self)
-    }
-
     pub fn capability(mut self, value: Vec<u8>) -> Result<Self> {
         self.capability = Some(value);
         Ok(self)

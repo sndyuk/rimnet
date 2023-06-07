@@ -43,13 +43,17 @@ pub async fn send(
     packet: &packet::Packet<impl AsRef<[u8]>>,
     to_addr: &SocketAddr,
 ) -> Result<()> {
-    let msg_len = packet.total_len() as usize;
-    let send_len = sock.send_to(packet.as_ref(), to_addr).await?;
-    if send_len != msg_len {
+    send_raw(sock, packet.as_ref(), to_addr).await
+}
+
+pub async fn send_raw(sock: &UdpSocket, buf: impl AsRef<[u8]>, to_addr: &SocketAddr) -> Result<()> {
+    let buf = buf.as_ref();
+    let send_len = sock.send_to(buf, to_addr).await?;
+    if send_len != buf.len() {
         return Err(anyhow!(
             "could not send all data. actual message length={}, expected={}",
             send_len,
-            msg_len
+            buf.len()
         ));
     } else {
         log::trace!("messge sent to {:?}", sock);
