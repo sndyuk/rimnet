@@ -1,4 +1,4 @@
-# [**WIP**] Rimnet
+# Rimnet
 
 Secure container anywahere.
 The Secure peer-to-peer overlay TCP/IP network.
@@ -7,11 +7,11 @@ The Secure peer-to-peer overlay TCP/IP network.
 - Machine:
   - [x] Linux
   - [x] MacOS
-- [x] Connect the peer agents using Noise protocol.
+- [x] Encrypt the packets by Noise protocol.
 - [ ] NAT hole punching.
 - CLI:
-  - [x] `knock` command: to request handshake.
-  - [x] `cert` command: to issue a client cert.
+  - [x] `knock-request` command: to request a handshake from the peer node.
+  - [x] `cert` command: to issue a static client cert.
 - Web GUI:
   - [ ] TBD
 - Reconnect the peer agent if the target agent lost the state:
@@ -29,7 +29,7 @@ The Secure peer-to-peer overlay TCP/IP network.
 ## Usage
 
 ### Machine 1
-1. Issue client cert
+1. Issue a static client cert
 
     ```sh
     $ cargo build -p cli --release && target/release/cli cert -n agent1
@@ -64,7 +64,7 @@ The Secure peer-to-peer overlay TCP/IP network.
     ```
 
 ### Machine 2
-1. Issue client cert
+1. Issue a static client cert
 
     ```sh
     $ cargo build -p cli --release && target/release/cli cert -n agent2
@@ -80,11 +80,17 @@ The Secure peer-to-peer overlay TCP/IP network.
     $ cargo build -p cli --release && target/release/cli knock-request --public-ipv4 <public IPv4 address of the machine> --target-public-ipv4 <public IPv4 address of the target host machine>
     ```
 
-### Validation the environment
-4. Run a stub server on the machine 1
+### Validate the connection
+4. Ping
 
+    On the machine 1
     ```sh
-    $ nc -l 10.0.0.4 8080
+    $ ping 10.0.0.4
+    ```
+
+    On the machine 2
+    ```sh
+    $ ping 10.0.0.3
     ```
 
 
