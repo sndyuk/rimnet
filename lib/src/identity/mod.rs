@@ -1,5 +1,5 @@
 use anyhow::*;
-use base64;
+use base64::{engine::general_purpose, Engine as _};
 use lazy_static::lazy_static;
 use regex::Regex;
 use snow::params::NoiseParams;
@@ -24,8 +24,8 @@ impl Keypair {
             ));
         }
 
-        let public_key = base64::encode(&self.public);
-        let private_key = base64::encode(&self.private);
+        let public_key = general_purpose::STANDARD_NO_PAD.encode(&self.public);
+        let private_key = general_purpose::STANDARD_NO_PAD.encode(&self.private);
         fs::write(format!("{}.pub", name), public_key)?;
         fs::write(format!("{}", name), private_key)?;
 
@@ -36,8 +36,8 @@ impl Keypair {
         let public_key = fs::read_to_string(format!("{}.pub", path))?;
         let private_key = fs::read_to_string(path)?;
         Ok(Keypair {
-            public: base64::decode(public_key)?,
-            private: base64::decode(private_key)?,
+            public: general_purpose::STANDARD_NO_PAD.decode(public_key)?,
+            private: general_purpose::STANDARD_NO_PAD.decode(private_key)?,
         })
     }
 }

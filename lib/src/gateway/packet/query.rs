@@ -1,4 +1,5 @@
 use anyhow::*;
+use base64::{engine::general_purpose, Engine as _};
 use std::{fmt, net::Ipv4Addr};
 
 pub const HEADER_FIX_LEN: usize = 13;
@@ -15,7 +16,10 @@ impl<B: AsRef<[u8]>> fmt::Debug for Query<B> {
             .field("public_ipv4", &self.public_ipv4())
             .field("public_port", &self.public_port())
             .field("target_private_ipv4", &self.target_private_ipv4())
-            .field("public_key", &base64::encode(&self.public_key()))
+            .field(
+                "public_key",
+                &general_purpose::STANDARD_NO_PAD.encode(&self.public_key()),
+            )
             .finish()
     }
 }

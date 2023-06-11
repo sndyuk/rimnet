@@ -1,9 +1,10 @@
 pub mod config;
 pub use config::*;
+pub use lib::identity;
+
 mod device;
 mod egress;
 mod ingress;
-pub use lib::identity;
 mod state;
 
 use anyhow::Result;

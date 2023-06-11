@@ -1,5 +1,4 @@
-extern crate base64;
-
+use base64::{engine::general_purpose, Engine as _};
 use std::net::Ipv4Addr;
 
 use anyhow::Result;
@@ -57,7 +56,10 @@ async fn main() -> Result<()> {
         let keypair = identity::generate_keypair()?;
         keypair
     };
-    log::info!("public key: {:?}", base64::encode(&keypair.public));
+    log::info!(
+        "public key: {:?}",
+        general_purpose::STANDARD_NO_PAD.encode(&keypair.public)
+    );
 
     // Start the inbound network
     let mut network_config_builder =
