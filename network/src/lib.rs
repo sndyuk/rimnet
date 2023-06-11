@@ -1,55 +1,96 @@
-use anyhow::*;
 pub mod config;
 pub use config::*;
-use snow::Builder as SnowBuilder;
+pub use lib::identity;
+
 mod device;
-mod inbound;
+mod egress;
+mod ingress;
 mod state;
-use base64;
-use regex::Regex;
-use std::fs;
+
+use anyhow::Result;
+use std::sync::Arc;
+use tokio::io::ReadHalf;
+use tokio::net::UdpSocket;
+use tokio::sync::{oneshot, Mutex};
+use tokio_util::codec::FramedRead;
+use tracing as log;
+use tun::{AsyncDevice, TunPacketCodec};
 
 pub async fn run(config: NetworkConfig) -> Result<()> {
-    inbound::run(config).await?;
-    Ok(())
+    run_network(config).await
 }
 
-pub struct Keypair {
-    pub public: Vec<u8>,
-    pub private: Vec<u8>,
-}
+async fn run_network(config: NetworkConfig) -> Result<()> {
+    let mut device =
+        device::NetworkDevice::<FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>>::create(
+            &config.name,
+            &config.private_ipv4,
+            config.mtu,
+        )?;
 
-impl Keypair {
-    pub fn save_to_file(&self, name: &str) -> Result<()> {
-        let re = Regex::new(r"^[a-zA-Z][0-9a-zA-Z\.]{2,22}$").unwrap();
-        if !re.is_match(name) {
-            return Err(anyhow!(
-                "name must be alphanumerics and dots and smaller than 24 characters"
-            ));
+    // Listen the tunnel(encrypted payload <==> raw payload) traffic port
+    let tunnel_sock_addr =
+        Arc::new(UdpSocket::bind(format!("{}:{}", config.public_ipv4, config.public_port)).await?);
+    // Set 128 to make connections stable.
+    tunnel_sock_addr.set_ttl(128)?;
+    log::info!(
+        "The tunnel listening on {:?}",
+        tunnel_sock_addr.local_addr()?
+    );
+
+    // Prepare the network
+    let network = Arc::new(Mutex::new(state::Network::new(format!(
+        "/tmp/rimnet.network-{}",
+        config.private_ipv4
+    ))?));
+
+    // Inbound incomming loop
+    let (tx1, rx1) = oneshot::channel();
+    tokio::spawn({
+        let tunnel_sock_addr = tunnel_sock_addr.clone();
+        let config = config.clone();
+        let network = network.clone();
+        async move {
+            match ingress::listen(&mut device.writer, &tunnel_sock_addr, network, &config).await {
+                Ok(_) => tx1.send(true),
+                Err(e) => {
+                    log::error!(
+                        "[Inbound / incomming] Could not recover the error. reason={}",
+                        e
+                    );
+                    tx1.send(false)
+                }
+            }
         }
+    });
 
-        let public_key = base64::encode(&self.public);
-        let private_key = base64::encode(&self.private);
-        fs::write(format!("{}.pub", name), public_key)?;
-        fs::write(format!("{}", name), private_key)?;
+    // Inbound outging loop
+    let (tx2, rx2) = oneshot::channel();
+    tokio::spawn({
+        let tunnel_sock_addr = tunnel_sock_addr.clone();
+        let config = config.clone();
+        let network = network.clone();
+        async move {
+            match egress::listen(&mut device.reader, &tunnel_sock_addr, network, &config).await {
+                Ok(_) => tx2.send(true),
+                Err(e) => {
+                    log::error!(
+                        "[Inbound / outgoing] Could not recover the error. reason={}",
+                        e
+                    );
+                    tx2.send(false)
+                }
+            }
+        }
+    });
 
-        Ok(())
-    }
-
-    pub fn load(path: &str) -> Result<Keypair> {
-        let public_key = fs::read_to_string(format!("{}.pub", path))?;
-        let private_key = fs::read_to_string(path)?;
-        Ok(Keypair {
-            public: base64::decode(public_key)?,
-            private: base64::decode(private_key)?,
-        })
-    }
-}
-
-pub fn generate_keypair() -> Result<Keypair> {
-    let snow_keypair = SnowBuilder::new(inbound::NOISE_PARAMS.clone()).generate_keypair()?;
-    Ok(Keypair {
-        private: snow_keypair.private,
-        public: snow_keypair.public,
-    })
+    tokio::select!(
+        _ = rx1 => {
+            log::error!("[Inbound / incomming] Killed by unknown error");
+        },
+        _ = rx2 => {
+            log::error!("[Inbound / outgoing] Killed by unknown error");
+        }
+    );
+    Ok(())
 }

@@ -5,6 +5,8 @@ use tokio_util::codec::FramedRead;
 use tracing as log;
 use tun::{AsyncDevice, TunPacketCodec};
 
+pub static SYNC_PACKET: [u8; 2] = [0x00, 0x01];
+
 pub struct NetworkDevice<R> {
     pub reader: R,
     pub writer: WriteHalf<AsyncDevice>,
@@ -15,15 +17,19 @@ fn create(
     private_ipv4: &Ipv4Addr,
     mtu: i32,
 ) -> Result<(ReadHalf<AsyncDevice>, WriteHalf<AsyncDevice>)> {
-    let mut device_name = name;
     #[cfg(target_os = "macos")]
     {
-        log::info!(
-            "MacOS detected, using \"utunN\" instead of the specified device name \"{}\"",
-            device_name
-        );
-        device_name = &mut "utun0";
+        let mut device_name = name;
+        {
+            log::info!(
+                "MacOS detected, using \"utunN\" instead of the specified device name \"{}\"",
+                device_name
+            );
+            device_name = &mut "utun0";
+        }
     }
+    #[cfg(target_os = "linux")]
+    let device_name = name;
 
     let mut tun = tun::Configuration::default();
     tun.name(device_name)
@@ -43,17 +49,6 @@ fn create(
     let tun_device = tun::create_as_async(&tun)?;
     log::debug!("device created");
     Ok(tokio::io::split(tun_device))
-}
-
-impl NetworkDevice<ReadHalf<AsyncDevice>> {
-    pub fn create(
-        name: &str,
-        private_ipv4: &Ipv4Addr,
-        mtu: i32,
-    ) -> Result<NetworkDevice<ReadHalf<AsyncDevice>>> {
-        let (reader, writer) = create(name, private_ipv4, mtu)?;
-        Ok(NetworkDevice { reader, writer })
-    }
 }
 
 impl NetworkDevice<FramedRead<ReadHalf<AsyncDevice>, TunPacketCodec>> {

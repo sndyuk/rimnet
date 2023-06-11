@@ -42,7 +42,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for TcpIp<B> {
 
 impl<B: AsRef<[u8]>> AsRef<[u8]> for TcpIp<B> {
     fn as_ref(&self) -> &[u8] {
-        &self.buffer.as_ref()
+        self.buffer.as_ref()
     }
 }
 

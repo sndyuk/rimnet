@@ -38,8 +38,8 @@ fn main() -> Result<()> {
     let len_remote = noise_remote.read_message(&buf_local[..len_local], &mut buf_remote)?;
     assert_eq!(&payload_local[..], &buf_remote[..len_remote]);
 
-    let mut noise_local = noise_local.into_stateless_transport_mode()?;
-    let mut noise_remote = noise_remote.into_stateless_transport_mode()?;
+    let noise_local = noise_local.into_stateless_transport_mode()?;
+    let noise_remote = noise_remote.into_stateless_transport_mode()?;
 
     println!("Case 1");
     let nonce_local = 0;

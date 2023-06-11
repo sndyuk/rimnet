@@ -97,7 +97,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for Packet<B> {
 
 impl<B: AsRef<[u8]>> AsRef<[u8]> for Packet<B> {
     fn as_ref(&self) -> &[u8] {
-        &self.buffer.as_ref()
+        self.buffer.as_ref()
     }
 }
 
@@ -215,7 +215,7 @@ impl PacketBuilder {
     }
 
     pub fn build(self) -> Result<Packet<Vec<u8>>> {
-        let source = self.source.ok_or(anyhow!("source is rquired"))?;
+        let source = self.source.ok_or_else(|| anyhow!("source is rquired"))?;
         let total_len = HEADER_FIX_LEN as u16 + self.payload_buffer.len() as u16;
         let buf = [
             &[

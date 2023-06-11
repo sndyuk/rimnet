@@ -1,11 +1,9 @@
-extern crate base64;
-
+use base64::{engine::general_purpose, Engine as _};
 use std::net::Ipv4Addr;
 
 use anyhow::Result;
 use clap::Parser;
 use tracing as log;
-use tracing_subscriber;
 
 use network::*;
 
@@ -52,12 +50,14 @@ async fn main() -> Result<()> {
 
     // Prepare keypair of the agent
     let keypair = if let Some(ref client_cert) = opts.client_cert {
-        Keypair::load(client_cert)?
+        identity::Keypair::load(client_cert)?
     } else {
-        let keypair = generate_keypair()?;
-        keypair
+        identity::generate_keypair()?
     };
-    log::info!("public key: {:?}", base64::encode(&keypair.public));
+    log::info!(
+        "public key: {:?}",
+        general_purpose::STANDARD.encode(&keypair.public)
+    );
 
     // Start the inbound network
     let mut network_config_builder =

@@ -1,4 +1,5 @@
 use anyhow::*;
+use base64::{engine::general_purpose, Engine as _};
 use std::{fmt, net::Ipv4Addr};
 
 pub const HEADER_FIX_LEN: usize = 9;
@@ -15,14 +16,17 @@ impl<B: AsRef<[u8]>> fmt::Debug for HandshakeAccept<B> {
             .field("nonce", &self.nonce())
             .field("public_ipv4", &self.public_ipv4())
             .field("public_port", &self.public_port())
-            .field("public_key", &base64::encode(&self.public_key()))
+            .field(
+                "public_key",
+                &general_purpose::STANDARD.encode(&self.public_key()),
+            )
             .finish()
     }
 }
 
 impl<B: AsRef<[u8]>> AsRef<[u8]> for HandshakeAccept<B> {
     fn as_ref(&self) -> &[u8] {
-        &self.buffer.as_ref()
+        self.buffer.as_ref()
     }
 }
 
@@ -81,8 +85,12 @@ impl HandshakeAcceptPacketBuilder {
     }
 
     pub fn build(self) -> Result<HandshakeAccept<Vec<u8>>> {
-        let public_ipv4 = self.public_ipv4.ok_or(anyhow!("public_ipv4 is rquired"))?;
-        let public_key = self.public_key.ok_or(anyhow!("public_key is rquired"))?;
+        let public_ipv4 = self
+            .public_ipv4
+            .ok_or_else(|| anyhow!("public_ipv4 is rquired"))?;
+        let public_key = self
+            .public_key
+            .ok_or_else(|| anyhow!("public_key is rquired"))?;
         let header_len = (HEADER_FIX_LEN + public_key.len()) as u8;
         Ok(HandshakeAccept::unchecked(
             [

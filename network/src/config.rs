@@ -44,7 +44,7 @@ impl NetworkConfigBuilder {
     pub fn build(self) -> Result<NetworkConfig> {
         let public_ipv4 = self.public_ipv4.unwrap_or("0.0.0.0".parse::<Ipv4Addr>()?);
         Ok(NetworkConfig {
-            name: self.name.unwrap_or(String::from("rimnet")),
+            name: self.name.unwrap_or_else(|| String::from("rimnet")),
             mtu: self.mtu,
             private_ipv4: self
                 .private_ipv4

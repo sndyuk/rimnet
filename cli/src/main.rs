@@ -70,7 +70,7 @@ async fn knock_request(
     let my_addr = format!("{}:{}", ipv4, port).parse::<SocketAddr>()?;
 
     // Connect to the remote client
-    let mut sock = UdpSocket::bind(format!("{}:0", ipv4)).await?;
+    let sock = UdpSocket::bind(format!("{}:0", ipv4)).await?;
     println!("connecting to {} ...", my_addr);
 
     // Send the knock request
@@ -86,7 +86,7 @@ async fn knock_request(
         .add_payload(knock_request_packet.as_ref())?
         .build()?;
 
-    gateway::send(&mut sock, &packet, &my_addr).await?;
+    gateway::send(&sock, &packet, &my_addr).await?;
     println!(
         "Sent knock packet: {:?} to {}",
         knock_request_packet, my_addr
@@ -95,7 +95,7 @@ async fn knock_request(
 }
 
 async fn cert(name: &str) -> Result<()> {
-    use network::generate_keypair;
-    generate_keypair()?.save_to_file(name)?;
+    use network::identity;
+    identity::generate_keypair()?.save_to_file(name)?;
     Ok(())
 }

@@ -42,7 +42,7 @@ fn main() -> Result<()> {
 
     let len_remote = noise_remote.write_message(&[], &mut buf_remote)?;
     // <- e, ee
-    let len_local = noise_local.read_message(&buf_remote[..len_remote], &mut buf_local)?;
+    noise_local.read_message(&buf_remote[..len_remote], &mut buf_local)?;
     //assert_eq!(&payload_remote[..], &buf_local[..len_local]);
 
     let noise_local = noise_local.into_stateless_transport_mode()?;

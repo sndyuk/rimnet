@@ -1,22 +1,44 @@
 name: Cargo Build & Test
 
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
 
-env: 
+env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build_and_test:
-    name: Rust project - latest
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        toolchain:
-          - stable
+
     steps:
-      - uses: actions/checkout@v3
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run: cargo build --verbose
-      - run: cargo test --verbose
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          components: rustfmt, clippy
+
+      - name: Apply cache for Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify code format
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+      - name: Verify with clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
