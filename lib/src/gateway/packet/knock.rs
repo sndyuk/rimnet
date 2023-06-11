@@ -17,7 +17,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for Knock<B> {
             .field("public_port", &self.public_port())
             .field(
                 "public_key",
-                &general_purpose::STANDARD_NO_PAD.encode(&self.public_key()),
+                &general_purpose::STANDARD.encode(&self.public_key()),
             )
             .finish()
     }
@@ -25,7 +25,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for Knock<B> {
 
 impl<B: AsRef<[u8]>> AsRef<[u8]> for Knock<B> {
     fn as_ref(&self) -> &[u8] {
-        &self.buffer.as_ref()
+        self.buffer.as_ref()
     }
 }
 
@@ -84,8 +84,12 @@ impl KnockPacketBuilder {
     }
 
     pub fn build(self) -> Result<Knock<Vec<u8>>> {
-        let public_ipv4 = self.public_ipv4.ok_or(anyhow!("public_ipv4 is rquired"))?;
-        let public_key = self.public_key.ok_or(anyhow!("public_key is rquired"))?;
+        let public_ipv4 = self
+            .public_ipv4
+            .ok_or_else(|| anyhow!("public_ipv4 is rquired"))?;
+        let public_key = self
+            .public_key
+            .ok_or_else(|| anyhow!("public_key is rquired"))?;
         let header_len = (HEADER_FIX_LEN + public_key.len()) as u8;
         Ok(Knock::unchecked(
             [

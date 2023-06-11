@@ -101,7 +101,7 @@ pub async fn listen(
                             // When this node is restarted and the peer has been connected before, it will reconnnect again.
                             // In the case the peer's public key or nonce is changed, a user must execute the knock-request CLI command manually.
                             gateway::send(
-                                &main_sock,
+                                main_sock,
                                 &gateway::packet::PacketBuilder::new()?
                                     .protocol(gateway::packet::Protocol::KnockRequest)?
                                     .source(config.private_ipv4)?
@@ -146,7 +146,7 @@ pub async fn listen(
                                     .build()?;
 
                                 log::trace!("query packet: {:?}", query_packet);
-                                gateway::send(&main_sock, &packet, &peer.public_addr_hole).await?;
+                                gateway::send(main_sock, &packet, &peer.public_addr_hole).await?;
                             }
                             continue;
                         }

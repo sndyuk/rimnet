@@ -18,7 +18,7 @@ impl<B: AsRef<[u8]>> fmt::Debug for KnockRequest<B> {
 
 impl<B: AsRef<[u8]>> AsRef<[u8]> for KnockRequest<B> {
     fn as_ref(&self) -> &[u8] {
-        &self.buffer.as_ref()
+        self.buffer.as_ref()
     }
 }
 
@@ -69,8 +69,10 @@ impl KnockRequestPacketBuilder {
     pub fn build(self) -> Result<KnockRequest<Vec<u8>>> {
         let private_ipv4 = self
             .private_ipv4
-            .ok_or(anyhow!("private_ipv4 is rquired"))?;
-        let public_ipv4 = self.public_ipv4.ok_or(anyhow!("public_ipv4 is rquired"))?;
+            .ok_or_else(|| anyhow!("private_ipv4 is rquired"))?;
+        let public_ipv4 = self
+            .public_ipv4
+            .ok_or_else(|| anyhow!("public_ipv4 is rquired"))?;
         Ok(KnockRequest::unchecked(
             [
                 &private_ipv4.octets(),

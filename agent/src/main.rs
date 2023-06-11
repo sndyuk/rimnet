@@ -4,7 +4,6 @@ use std::net::Ipv4Addr;
 use anyhow::Result;
 use clap::Parser;
 use tracing as log;
-use tracing_subscriber;
 
 use network::*;
 
@@ -53,12 +52,11 @@ async fn main() -> Result<()> {
     let keypair = if let Some(ref client_cert) = opts.client_cert {
         identity::Keypair::load(client_cert)?
     } else {
-        let keypair = identity::generate_keypair()?;
-        keypair
+        identity::generate_keypair()?
     };
     log::info!(
         "public key: {:?}",
-        general_purpose::STANDARD_NO_PAD.encode(&keypair.public)
+        general_purpose::STANDARD.encode(&keypair.public)
     );
 
     // Start the inbound network

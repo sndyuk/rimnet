@@ -1,7 +1,5 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use serde_yaml;
-use sled;
 use snow::StatelessTransportState;
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -23,13 +21,13 @@ impl Network {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ReservedNode {
     pub private_ipv4: Ipv4Addr,
     pub nonce: u16,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Node {
     pub public_addr: SocketAddr,
     pub public_addr_hole: SocketAddr,
@@ -43,7 +41,7 @@ impl Network {
         private_ipv4: &Ipv4Addr,
     ) -> Result<(Option<Node>, Option<Arc<StatelessTransportState>>)> {
         Network::deserialize(&self.db.get(private_ipv4.to_string())?)
-            .map(|node| (node, self.local.get(private_ipv4).map(|v| v.clone())))
+            .map(|node| (node, self.local.get(private_ipv4).cloned()))
     }
 
     pub fn reserve_node_knock(&mut self, private_ipv4: Ipv4Addr) -> Result<ReservedNode> {
@@ -102,7 +100,7 @@ impl Network {
         })?;
 
         let old_value = self.db.insert(private_ipv4.to_string(), v.as_bytes())?;
-        self.local.insert(private_ipv4.clone(), ts);
+        self.local.insert(*private_ipv4, ts);
         self.db.flush()?;
 
         Network::deserialize(&old_value)

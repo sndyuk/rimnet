@@ -97,7 +97,7 @@ pub async fn listen(
                                 log::trace!("handshake packet: {:?}", handshake_packet);
                                 let mut hs = HandshakeBuilder::new(identity::NOISE_PARAMS.clone())
                                     .local_private_key(&config.private_key)
-                                    .remote_public_key(&knock_packet.public_key().as_ref())
+                                    .remote_public_key(knock_packet.public_key().as_ref())
                                     .build_initiator()?;
 
                                 let mut buf = [0u8; 127];
@@ -186,7 +186,7 @@ pub async fn listen(
                                     handshake_packet.nonce(),
                                     peer_public_addr,
                                     peer_public_addr_hole,
-                                    handshake_packet.public_key().to_vec(),
+                                    handshake_packet.public_key(),
                                     ts.clone(),
                                 )?;
 
@@ -244,7 +244,7 @@ pub async fn listen(
                                     handshake_accept_packet.nonce(),
                                     peer_public_addr,
                                     peer_public_addr_hole,
-                                    handshake_accept_packet.public_key().to_vec(),
+                                    handshake_accept_packet.public_key(),
                                     ts.clone(),
                                 )?;
 
@@ -325,7 +325,7 @@ pub async fn listen(
                                         // When this node is restarted and the peer has been connected before, it will reconnnect again.
                                         // In the case the peer's public key or nonce is changed, a user must execute the knock-request CLI command manually.
                                         gateway::send(
-                                            &main_sock,
+                                            main_sock,
                                             &gateway::packet::PacketBuilder::new()?
                                                 .protocol(gateway::packet::Protocol::KnockRequest)?
                                                 .source(config.private_ipv4)?
