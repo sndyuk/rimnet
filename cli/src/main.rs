@@ -95,7 +95,7 @@ async fn knock_request(
 }
 
 async fn cert(name: &str) -> Result<()> {
-    use network::generate_keypair;
-    generate_keypair()?.save_to_file(name)?;
+    use network::identity;
+    identity::generate_keypair()?.save_to_file(name)?;
     Ok(())
 }

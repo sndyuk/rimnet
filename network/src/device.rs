@@ -5,6 +5,8 @@ use tokio_util::codec::FramedRead;
 use tracing as log;
 use tun::{AsyncDevice, TunPacketCodec};
 
+pub static SYNC_PACKET: [u8; 2] = [0x00, 0x01];
+
 pub struct NetworkDevice<R> {
     pub reader: R,
     pub writer: WriteHalf<AsyncDevice>,

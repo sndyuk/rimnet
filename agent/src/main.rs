@@ -52,9 +52,9 @@ async fn main() -> Result<()> {
 
     // Prepare keypair of the agent
     let keypair = if let Some(ref client_cert) = opts.client_cert {
-        Keypair::load(client_cert)?
+        identity::Keypair::load(client_cert)?
     } else {
-        let keypair = generate_keypair()?;
+        let keypair = identity::generate_keypair()?;
         keypair
     };
     log::info!("public key: {:?}", base64::encode(&keypair.public));
