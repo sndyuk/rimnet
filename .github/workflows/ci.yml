@@ -20,9 +20,25 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-            components: rustfmt, clippy
+          profile: minimal
+          components: rustfmt, clippy
 
-      - run: cargo fmt --all -- --check
-      - run: cargo build --verbose
-      - run: cargo clippy --all-features
-      - run: cargo test --verbose
+      - name: Apply cache for Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify code format
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+      - name: Verify with clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
