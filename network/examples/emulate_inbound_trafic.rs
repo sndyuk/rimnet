@@ -42,7 +42,7 @@ async fn send_sample_messages(
     target_private_ipv4: &str,
 ) -> Result<()> {
     // Connect to the remote node
-    let mut sock = UdpSocket::bind(format!("{}:0", host_ipv4)).await?;
+    let sock = UdpSocket::bind(format!("{}:0", host_ipv4)).await?;
     println!("binded to the local address {}", sock.local_addr()?);
     let server_addr = format!("{}:{}", public_ipv4, public_port).parse::<SocketAddr>()?;
     println!("connecting to {} ...", server_addr);
@@ -99,7 +99,7 @@ async fn send_sample_messages(
             .build()?;
         println!("packet: {:?}", packet);
 
-        gateway::send(&mut sock, &packet, &server_addr).await?;
+        gateway::send(&sock, &packet, &server_addr).await?;
     }
     Ok(())
 }
